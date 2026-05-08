@@ -1,0 +1,48 @@
+# -------------------------
+# Python
+# -------------------------
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pkl
+*.h5
+*.pt
+*.pth
+
+# Virtual Environments
+.venv/
+venv/
+env/
+.env/
+
+# Jupyter Notebook Checkpoints
+.ipynb_checkpoints/
+
+# Distribution / Packaging
+build/
+dist/
+*.egg-info/
+
+# Logs & Temp Files
+*.log
+logs/
+tmp/
+temp/
+*.swp
+.DS_Store
+
+# OS / System Files
+Thumbs.db
+
+# IDE / Editor
+.vscode/
+.idea/
+*.code-workspace
+
+# Cache
+.cache/
+*.xnb
+*.npy
+*.npz
+

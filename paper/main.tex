@@ -1,0 +1,35 @@
+\documentclass[journal]{IEEEtran}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{booktabs}
+\usepackage{cite}
+\usepackage{url}
+
+\title{DR-GSMamba: Distributionally Robust Graph-State-Space Learning for Label-Scarce Hyperspectral Image Classification}
+
+\author{Kassim Diarra, Xiaoqiang Di, Boubacar M. Keita, Omar M. Dugsiye and Jinhui Cao%
+\thanks{Kassim Diarra, Xiaoqiang Di, Boubacar M. Keita, Omar M. Dugsiye and Jinhui Cao are with the School of Computer Science and Technology, Changchun University of Science and Technology, Changchun, China. Corresponding author: Xiaoqiang Di.}}
+
+\begin{document}
+\markboth{SUBMISSION TO IEEE TRANSACTIONS ON GEOSCIENCE AND REMOTE SENSING, VOL. XX, NO. XX, XXXX, 2026}%
+{Diarra \MakeLowercase{\textit{et al.}}: DR-GSMamba for Hyperspectral Image Classification}
+\maketitle
+
+\begin{abstract}
+Hyperspectral image classification requires models that can identify subtle spectral differences while remaining stable under limited annotations, class imbalance, mixed pixels, and changing training splits. Although convolutional networks, Transformers, graph neural networks, and recent state-space models have improved spectral-spatial representation learning, many methods are still evaluated mainly under fixed splits and provide limited evidence about robustness. This paper proposes DR-GSMamba, a distributionally robust graph-state-space framework for label-scarce hyperspectral image classification. The method integrates a spectral state-space encoder, a compact spatial convolutional stem, patch-level graph message passing, prototype-based classification, and uncertainty-aware robust optimization. The spectral encoder captures long-range band dependencies with linear complexity, while the graph branch models non-local contextual structure inside local neighborhoods. A conditional value-at-risk objective emphasizes difficult samples, and a prototype consistency term improves class compactness and interpretability. The proposed evaluation protocol reports overall accuracy, average accuracy, Kappa, Macro-F1, per-class accuracy, uncertainty, computational cost, and multi-seed stability on public HSI benchmarks. The accompanying project provides reproducible PyTorch code, automatic table and figure generation, and a complete manuscript pipeline for journal submission.
+\end{abstract}
+
+\begin{IEEEkeywords}
+Hyperspectral image classification, state-space model, Mamba, graph neural network, distributionally robust learning, uncertainty estimation.
+\end{IEEEkeywords}
+
+\input{sections/introduction}
+\input{sections/related_work}
+\input{sections/methodology}
+\input{sections/experiments}
+\input{sections/conclusion}
+
+\bibliographystyle{IEEEtran}
+\bibliography{references}
+\end{document}
