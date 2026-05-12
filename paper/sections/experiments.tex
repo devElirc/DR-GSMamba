@@ -5,14 +5,20 @@ The full benchmark study is designed for public HSI datasets including Indian Pi
 \subsection{Implementation Details}
 The implementation is written in PyTorch. Each data cube is normalized band-wise, and PCA is optionally applied before patch extraction. Unless otherwise stated, the patch size is set to $9\times9$, the hidden dimension is 128, and AdamW is used for optimization. Each experiment is repeated over multiple random seeds. The best model is selected according to validation overall accuracy and evaluated once on the test split.
 
+\subsection{Label-Scarce Protocol}
+The main reliability protocol uses fixed labels per class instead of only percentage-based splits. This makes the low-label setting comparable across classes and prevents large classes from dominating the training set. The benchmark should include extremely scarce and moderately scarce supervision settings, and the final report should show the accuracy drop from easier settings to harder settings.
+
 \subsection{Evaluation Metrics}
 The main metrics are overall accuracy (OA), average accuracy (AA), Cohen's Kappa, Macro-F1, per-class accuracy, worst-class accuracy, rare-class accuracy, expected calibration error (ECE), and confusion matrix. OA measures the total proportion of correctly classified pixels. AA gives equal weight to each class and is therefore more informative under imbalance. Macro-F1, worst-class accuracy, and rare-class accuracy directly evaluate the reliability-oriented claim. Kappa evaluates agreement beyond chance. Mean uncertainty, ECE, and uncertainty maps are also reported to analyze ambiguous predictions.
 
 \subsection{Baselines}
-Recommended baselines include 3D-CNN, HybridSN, SSRN, SpectralFormer or SSFTT, a graph-based classifier, a recent Mamba-based classifier, and SCATNet when comparing against the authors' previous work. The final submission should use official code when available or carefully reimplemented baselines under the same splits.
+Recommended baselines are organized into three groups: classical or shallow methods, CNN/Transformer HSI classifiers, and recent graph or Mamba-based HSI classifiers. Candidate methods include SVM-style shallow baselines, 3D-CNN, HybridSN, SSRN, SpectralFormer or SSFTT, Swin-style HSI Transformers, HyperEAST or FactoFormer-style recent Transformers when comparable, graph-based classifiers, and recent Mamba-related HSI models. The final submission should use official code when available or carefully reimplemented baselines under the same splits.
+
+\subsection{Statistical and Efficiency Analysis}
+For key comparisons, especially full DR-GSMamba versus the model without the robust objective, paired multi-seed tests should be reported in addition to mean and standard deviation. The goal is not only to show a larger mean, but to show that the improvement is stable over random splits. If computational efficiency is claimed, the paper should report parameter count, inference latency, and, when available, FLOPs for DR-GSMamba and the main Transformer or Mamba baselines under the same input setting.
 
 \subsection{Ablation Study}
-The ablation study removes the spectral state-space branch, graph branch, robust loss, prototype head, and graph smoothness term independently. Additional experiments should vary the number of labeled samples per class and introduce controlled label noise. This design tests whether each component improves not only accuracy but also stability.
+The ablation study removes the spectral state-space branch, graph branch, robust loss, prototype head, uncertainty weighting, and graph smoothness term independently. The critical ablation is the full model versus the same model without the robust objective. If this comparison does not improve rare-class accuracy, worst-class accuracy, or split stability, the distributionally robust claim should be weakened. Additional experiments should replace the state-space branch with a Transformer-style spectral branch and replace graph reasoning with a CNN-only spatial branch when resources allow. This design tests whether each component improves not only accuracy but also reliability.
 
 \subsection{Pipeline Verification}
 Before full benchmark training, a synthetic HSI scene was used to verify the code path. The smoke test confirms that data loading, PCA, patch extraction, model training, validation, testing, checkpoint saving, metric logging, table generation, and figure generation execute end-to-end. These synthetic results are not intended as scientific evidence; they are included only to verify reproducibility infrastructure.
@@ -32,4 +38,4 @@ Before full benchmark training, a synthetic HSI scene was used to verify the cod
 \end{figure}
 
 \subsection{Expected Final Reporting}
-For a journal submission, Table~\ref{tab:pipeline} must be replaced by benchmark results on real datasets. The final paper should include a main comparison table, per-class accuracy tables, ablation tables, classification maps, uncertainty maps, stability boxplots over random seeds, and a computational cost comparison. The repository already stores all metrics in JSON format, making these assets reproducible from experiment outputs.
+For a journal submission, Table~\ref{tab:pipeline} must be replaced by benchmark results on real datasets. The final paper should include a main comparison table, per-class accuracy tables, ablation tables, classification maps, uncertainty maps, stability boxplots over random seeds, and a computational cost comparison. If efficiency is claimed, parameter count, FLOPs, training time, and inference time must be compared with relevant Transformer and Mamba baselines. The repository already stores all metrics in JSON format, making these assets reproducible from experiment outputs.

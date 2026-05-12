@@ -14,6 +14,16 @@ def load_config(path: str | Path) -> dict:
         return yaml.safe_load(f)
 
 
+def deep_update(base: dict, updates: dict) -> dict:
+    """Recursively update a config dict without changing unrelated keys."""
+    for key, value in updates.items():
+        if isinstance(value, dict) and isinstance(base.get(key), dict):
+            deep_update(base[key], value)
+        else:
+            base[key] = value
+    return base
+
+
 def set_seed(seed: int) -> None:
     random.seed(seed)
     np.random.seed(seed)
@@ -34,4 +44,3 @@ def save_json(obj: dict, path: str | Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
         json.dump(obj, f, indent=2)
-

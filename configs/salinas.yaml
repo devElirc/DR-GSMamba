@@ -1,16 +1,16 @@
 project: DR-GSMamba
 dataset:
-  name: indian_pines
-  root: ../SCATNet_Codebase_update/data/indian_pines
-  data_file: Indian_pines_corrected.mat
-  gt_file: Indian_pines_gt.mat
-  data_key: indian_pines_corrected
-  gt_key: indian_pines_gt
+  name: salinas
+  root: ../SCATNet_Codebase_update/data/salinas
+  data_file: Salinas_corrected.mat
+  gt_file: Salinas_gt.mat
+  data_key: salinas_corrected
+  gt_key: salinas_gt
   pca_components: 30
   patch_size: 9
   train_ratio: 0.05
   val_ratio: 0.05
-  samples_per_class: 30
+  samples_per_class: 20
 training:
   seeds: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
   epochs: 80
@@ -35,4 +35,4 @@ loss:
   uncertainty_weight: 0.05
   graph_smooth_weight: 0.02
 outputs:
-  dir: outputs/indian_pines
+  dir: outputs/salinas
