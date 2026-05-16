@@ -27,11 +27,14 @@ model:
   hidden_dim: 96
   graph_nodes: 81
   depth: 3
+  spectral_backend: ssm
+  spectral_heads: 4
   use_spectral: true
   use_graph: true
   use_prototype: true
 loss:
   robust_alpha: 0.3
+  risk_ema_momentum: 0.9
   robust_weight: 0.3
   prototype_weight: 0.1
   prototype_supervised_weight: 0.05

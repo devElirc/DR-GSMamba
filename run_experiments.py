@@ -59,6 +59,12 @@ def main():
     parser.add_argument("--disable-uncertainty", action="store_true", help="Set uncertainty loss weight to zero.")
     parser.add_argument("--disable-graph", action="store_true", help="Disable graph context and graph smoothness.")
     parser.add_argument("--disable-spectral", action="store_true", help="Disable spectral state-space branch.")
+    parser.add_argument(
+        "--spectral-backend",
+        choices=["ssm", "transformer", "cnn"],
+        default=None,
+        help="Replace the spectral branch for controlled ablations.",
+    )
     args = parser.parse_args()
     cfg = copy.deepcopy(load_config(args.config))
     updates: dict = {}
@@ -81,6 +87,8 @@ def main():
         updates.setdefault("loss", {})["graph_smooth_weight"] = 0.0
     if args.disable_spectral:
         updates.setdefault("model", {})["use_spectral"] = False
+    if args.spectral_backend is not None:
+        updates.setdefault("model", {})["spectral_backend"] = args.spectral_backend
     deep_update(cfg, updates)
     summary = run_config(cfg)
     print(summary)

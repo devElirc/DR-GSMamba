@@ -19,6 +19,8 @@ ABLATIONS = {
     "full": {},
     "without_dro": {"loss": {"robust_weight": 0.0}},
     "without_spectral_ssm": {"model": {"use_spectral": False}},
+    "spectral_transformer": {"model": {"spectral_backend": "transformer"}},
+    "spectral_cnn": {"model": {"spectral_backend": "cnn"}},
     "without_graph": {"model": {"use_graph": False}, "loss": {"graph_smooth_weight": 0.0}},
     "without_prototype": {
         "model": {"use_prototype": False},

@@ -11,7 +11,7 @@ For a labeled pixel at position $(i,j)$, the input consists of the center spectr
 \end{figure*}
 
 \subsection{Spectral State-Space Encoder}
-The center spectrum is treated as a one-dimensional ordered sequence. Each scalar band value is projected into a hidden feature space. The sequence is then processed by stacked state-space style blocks. Each block contains layer normalization, gated projection, depthwise sequence mixing, and residual projection. This design follows the spirit of selective state-space modeling while avoiding an external CUDA dependency, making the implementation easy to reproduce.
+The center spectrum is treated as a one-dimensional ordered sequence. Each scalar band value is projected into a hidden feature space. The sequence is then processed by stacked state-space-style blocks. Each block contains layer normalization, gated projection, depthwise sequence mixing, and residual projection. This dependency-free implementation is used as a reproducible spectral SSM-style backbone; if an official selective-scan Mamba kernel is used in final experiments, the same interface can be retained while replacing this block.
 
 Let $\mathbf{Z}^{(0)}\in\mathbb{R}^{C\times d}$ be the embedded spectral sequence. For the $l$-th block, the update is written as
 \begin{equation}
@@ -46,8 +46,8 @@ The training objective combines standard cross entropy, sample-level CVaR, class
 \begin{equation}
 \mathcal{L}=\mathcal{L}_{ce}+\lambda_1\mathcal{L}_{dro}+\lambda_2\mathcal{L}_{proto}+\lambda_3\mathcal{L}_{unc}+\lambda_4\mathcal{L}_{graph}.
 \end{equation}
-The robust term combines the largest per-sample losses and the largest class-wise risks within a mini-batch:
+The robust term combines the largest per-sample losses and the largest class-wise risks. To reduce mini-batch noise under scarce labels, class risks are tracked with an exponential moving average and the current high-risk classes are emphasized during optimization:
 \begin{equation}
 \mathcal{L}_{dro}=\frac{1}{2}\mathrm{CVaR}_{\alpha}(\{\ell_n\})+\frac{1}{2}\mathrm{CVaR}_{\alpha}(\{\bar{\ell}_c\}),
 \end{equation}
-where $\ell_n$ is the sample loss and $\bar{\ell}_c$ is the mean loss of class $c$ in the mini-batch. This gives the distributionally robust claim a concrete optimization target: difficult samples and high-risk classes both affect the gradient. Prototype consistency aligns the linear classifier with the prototype classifier, supervised prototype compactness pulls features toward their class prototypes, and graph smoothness regularizes node-level predictions over the learned patch graph.
+where $\ell_n$ is the sample loss and $\bar{\ell}_c$ is the tracked mean loss of class $c$. This gives the distributionally robust claim a concrete optimization target: difficult samples and high-risk classes both affect the gradient. Prototype consistency aligns the linear classifier with the prototype classifier, supervised prototype compactness pulls features toward their class prototypes, and graph smoothness regularizes node-level predictions over the learned patch graph.

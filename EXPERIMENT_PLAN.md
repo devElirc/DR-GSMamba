@@ -16,7 +16,7 @@ Can graph-state-space modeling with explicit robust optimization improve the rel
 2. Graph-state-space modeling has a clear role.
    - Ablate the spectral state-space branch.
    - Ablate the graph branch.
-   - Add Transformer-replacement and CNN-only spatial variants when resources allow.
+   - Run Transformer and 1D-CNN spectral replacement variants under the same graph/prototype/DRO framework.
 
 3. Prototype and uncertainty modules support reliability.
    - Ablate prototype learning.
@@ -92,4 +92,11 @@ Full model vs. without-DRO comparison:
 
 ```bash
 python scripts/compare_runs.py --full outputs/protocol/ablations/full/summary.json --baseline outputs/protocol/ablations/without_dro/summary.json
+```
+
+Spectral-backbone replacement checks:
+
+```bash
+python run_experiments.py --config configs/indian_pines.yaml --spectral-backend transformer --output-dir outputs/indian_pines_transformer
+python run_experiments.py --config configs/indian_pines.yaml --spectral-backend cnn --output-dir outputs/indian_pines_cnn
 ```

@@ -1,7 +1,33 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 import torch
 import torch.nn.functional as F
+
+
+@dataclass
+class RobustRiskTracker:
+    """EMA tracker for class risks used by the GroupDRO-style robust loss."""
+
+    num_classes: int
+    momentum: float = 0.9
+    device: torch.device | None = None
+
+    def __post_init__(self) -> None:
+        device = self.device if self.device is not None else torch.device("cpu")
+        self.risks = torch.zeros(self.num_classes, device=device)
+        self.seen = torch.zeros(self.num_classes, dtype=torch.bool, device=device)
+
+    def update(self, batch_risks: torch.Tensor, present: torch.Tensor) -> torch.Tensor:
+        present = present.to(self.risks.device)
+        batch_risks = batch_risks.to(self.risks.device)
+        old = self.risks[present]
+        new = batch_risks[present]
+        initialized = self.seen[present]
+        self.risks[present] = torch.where(initialized, self.momentum * old + (1.0 - self.momentum) * new, new)
+        self.seen[present] = True
+        return self.risks
 
 
 def cvar_loss(sample_losses: torch.Tensor, alpha: float = 0.3) -> torch.Tensor:
@@ -19,6 +45,58 @@ def class_dro_loss(sample_losses: torch.Tensor, labels: torch.Tensor, num_classe
     if not class_risks:
         return sample_losses.mean()
     risks = torch.stack(class_risks)
+    k = max(1, int(alpha * risks.numel()))
+    return torch.topk(risks, k=k).values.mean()
+
+
+def tracked_class_dro_loss(
+    sample_losses: torch.Tensor,
+    labels: torch.Tensor,
+    num_classes: int,
+    alpha: float = 0.3,
+    tracker: RobustRiskTracker | None = None,
+) -> torch.Tensor:
+    """Class-level CVaR with optional EMA risk memory.
+
+    Mini-batch class DRO can be unstable under label scarcity because many
+    classes are absent from a batch. The tracker keeps a running class-risk
+    estimate and optimizes the current worst classes among those observed so far.
+    """
+    batch_risks = sample_losses.new_zeros(num_classes)
+    present = torch.zeros(num_classes, dtype=torch.bool, device=sample_losses.device)
+    for cls in range(num_classes):
+        mask = labels == cls
+        if mask.any():
+            batch_risks[cls] = sample_losses[mask].mean()
+            present[cls] = True
+    if tracker is None:
+        risks = batch_risks[present]
+        if risks.numel() == 0:
+            return sample_losses.mean()
+        k = max(1, int(alpha * risks.numel()))
+        return torch.topk(risks, k=k).values.mean()
+
+    with torch.no_grad():
+        tracker.update(batch_risks.detach(), present.detach())
+        seen = tracker.seen.detach().clone().to(sample_losses.device)
+        tracked = tracker.risks.detach().clone().to(sample_losses.device)
+        seen_classes = torch.nonzero(seen, as_tuple=False).flatten()
+        tracked_risks = tracked[seen_classes]
+        if tracked_risks.numel() > 0:
+            k = max(1, int(alpha * tracked_risks.numel()))
+            high_risk_classes = seen_classes[torch.topk(tracked_risks, k=k).indices]
+        else:
+            high_risk_classes = torch.empty(0, dtype=torch.long, device=sample_losses.device)
+
+    selected_classes = torch.zeros(num_classes, dtype=torch.bool, device=sample_losses.device)
+    selected_classes[high_risk_classes] = True
+    selected_sample_mask = selected_classes[labels]
+    if selected_sample_mask.any():
+        return sample_losses[selected_sample_mask].mean()
+
+    risks = batch_risks[present]
+    if risks.numel() == 0:
+        return sample_losses.mean()
     k = max(1, int(alpha * risks.numel()))
     return torch.topk(risks, k=k).values.mean()
 
@@ -47,13 +125,18 @@ def graph_smoothness_loss(node_logits: torch.Tensor, adj: torch.Tensor) -> torch
     return F.mse_loss(node_probs, smooth)
 
 
-def dr_gsmamba_loss(outputs: dict, labels: torch.Tensor, cfg: dict) -> tuple[torch.Tensor, dict]:
+def dr_gsmamba_loss(
+    outputs: dict,
+    labels: torch.Tensor,
+    cfg: dict,
+    tracker: RobustRiskTracker | None = None,
+) -> tuple[torch.Tensor, dict]:
     weights = cfg.get("loss", {})
     sample_losses = F.cross_entropy(outputs["logits"], labels, reduction="none")
     ce = sample_losses.mean()
     alpha = float(weights.get("robust_alpha", 0.3))
     sample_robust = cvar_loss(sample_losses, alpha=alpha)
-    class_robust = class_dro_loss(sample_losses, labels, outputs["logits"].shape[-1], alpha=alpha)
+    class_robust = tracked_class_dro_loss(sample_losses, labels, outputs["logits"].shape[-1], alpha=alpha, tracker=tracker)
     robust = 0.5 * sample_robust + 0.5 * class_robust
     proto = prototype_consistency_loss(outputs["linear_logits"], outputs["proto_logits"])
     proto_supervised = supervised_prototype_loss(outputs["features"], outputs["prototypes"], labels)

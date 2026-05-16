@@ -6,7 +6,12 @@ import torch.nn.functional as F
 
 
 class SpectralSSMBlock(nn.Module):
-    """A lightweight state-space style spectral mixer that avoids external Mamba kernels."""
+    """A lightweight state-space-style spectral mixer.
+
+    This dependency-free fallback is not a CUDA selective-scan Mamba kernel.
+    Keep paper wording precise unless this block is replaced by an official
+    Mamba implementation for the final benchmark.
+    """
 
     def __init__(self, dim: int):
         super().__init__()
@@ -36,6 +41,64 @@ class SpectralEncoder(nn.Module):
         for block in self.blocks:
             x = block(x)
         return self.pool(x.transpose(1, 2)).squeeze(-1)
+
+
+class SpectralTransformerEncoder(nn.Module):
+    """Transformer replacement used for controlled spectral-backbone ablations."""
+
+    def __init__(self, spectral_dim: int, hidden_dim: int, depth: int, num_heads: int = 4):
+        super().__init__()
+        if hidden_dim % num_heads != 0:
+            num_heads = 1
+        self.embed = nn.Linear(1, hidden_dim)
+        self.position = nn.Parameter(torch.zeros(1, spectral_dim, hidden_dim))
+        layer = nn.TransformerEncoderLayer(
+            d_model=hidden_dim,
+            nhead=num_heads,
+            dim_feedforward=hidden_dim * 4,
+            dropout=0.1,
+            activation="gelu",
+            batch_first=True,
+        )
+        self.blocks = nn.TransformerEncoder(layer, num_layers=max(1, depth))
+        self.norm = nn.LayerNorm(hidden_dim)
+
+    def forward(self, spectrum: torch.Tensor) -> torch.Tensor:
+        x = self.embed(spectrum.unsqueeze(-1)) + self.position[:, : spectrum.shape[1]]
+        return self.norm(self.blocks(x)).mean(dim=1)
+
+
+class SpectralCNNEncoder(nn.Module):
+    """Compact 1D-CNN replacement used to test whether sequence modeling matters."""
+
+    def __init__(self, spectral_dim: int, hidden_dim: int, depth: int):
+        super().__init__()
+        layers: list[nn.Module] = [nn.Conv1d(1, hidden_dim, kernel_size=5, padding=2), nn.GELU()]
+        for _ in range(max(1, depth) - 1):
+            layers.extend(
+                [
+                    nn.Conv1d(hidden_dim, hidden_dim, kernel_size=5, padding=2, groups=hidden_dim),
+                    nn.Conv1d(hidden_dim, hidden_dim, kernel_size=1),
+                    nn.BatchNorm1d(hidden_dim),
+                    nn.GELU(),
+                ]
+            )
+        self.net = nn.Sequential(*layers)
+        self.pool = nn.AdaptiveAvgPool1d(1)
+
+    def forward(self, spectrum: torch.Tensor) -> torch.Tensor:
+        x = self.net(spectrum.unsqueeze(1))
+        return self.pool(x).squeeze(-1)
+
+
+def build_spectral_encoder(backend: str, spectral_dim: int, hidden_dim: int, depth: int, num_heads: int) -> nn.Module:
+    if backend == "ssm":
+        return SpectralEncoder(spectral_dim, hidden_dim, depth)
+    if backend == "transformer":
+        return SpectralTransformerEncoder(spectral_dim, hidden_dim, depth, num_heads=num_heads)
+    if backend == "cnn":
+        return SpectralCNNEncoder(spectral_dim, hidden_dim, depth)
+    raise ValueError(f"Unknown spectral backend: {backend}. Expected one of: ssm, transformer, cnn.")
 
 
 class SpatialStem(nn.Module):
@@ -98,13 +161,16 @@ class DRGSMamba(nn.Module):
         use_spectral: bool = True,
         use_graph: bool = True,
         use_prototype: bool = True,
+        spectral_backend: str = "ssm",
+        spectral_heads: int = 4,
         **_: int,
     ):
         super().__init__()
         self.use_spectral = use_spectral
         self.use_graph = use_graph
         self.use_prototype = use_prototype
-        self.spectral = SpectralEncoder(spectral_dim, hidden_dim, depth)
+        self.spectral_backend = spectral_backend
+        self.spectral = build_spectral_encoder(spectral_backend, spectral_dim, hidden_dim, depth, spectral_heads)
         self.spatial = SpatialStem(spectral_dim, hidden_dim)
         self.graph = PatchGraphEncoder(hidden_dim)
         self.fusion = nn.Sequential(

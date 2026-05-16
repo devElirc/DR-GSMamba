@@ -12,6 +12,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from models import DRGSMamba
+from datasets import load_hsi
 from utils.common import get_device, load_config, save_json
 
 
@@ -55,7 +56,7 @@ def main():
     device = get_device(cfg["training"]["device"])
     spectral_dim = int(cfg["dataset"]["pca_components"])
     patch_size = int(cfg["dataset"]["patch_size"])
-    num_classes = int(cfg["dataset"].get("synthetic", {}).get("classes", 16))
+    num_classes = load_hsi(cfg, seed=0).num_classes
     model = DRGSMamba(
         spectral_dim=spectral_dim,
         num_classes=num_classes,
@@ -64,6 +65,8 @@ def main():
         use_spectral=cfg["model"].get("use_spectral", True),
         use_graph=cfg["model"].get("use_graph", True),
         use_prototype=cfg["model"].get("use_prototype", True),
+        spectral_backend=cfg["model"].get("spectral_backend", "ssm"),
+        spectral_heads=cfg["model"].get("spectral_heads", 4),
     ).to(device)
     patch = torch.randn(args.batch_size, spectral_dim, patch_size, patch_size, device=device)
     spectrum = torch.randn(args.batch_size, spectral_dim, device=device)

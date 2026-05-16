@@ -8,7 +8,6 @@ import numpy as np
 import scipy.io as sio
 import torch
 from sklearn.decomposition import PCA
-from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader, Dataset
 
 
@@ -73,16 +72,24 @@ def make_synthetic_hsi(params: Dict, seed: int) -> HSIData:
     return HSIData(cube=cube.astype(np.float32), labels=labels, num_classes=classes)
 
 
-def normalize_and_reduce(cube: np.ndarray, labels: np.ndarray, components: int, seed: int) -> np.ndarray:
+def normalize_and_reduce(cube: np.ndarray, fit_indices: np.ndarray, components: int, seed: int) -> np.ndarray:
+    """Normalize and reduce an HSI cube using training pixels only.
+
+    Fitting PCA on every labeled pixel leaks validation/test distribution into
+    preprocessing. For reviewer-facing experiments, the train split must define
+    the scaler and PCA projection, then the learned transform is applied to all
+    pixels.
+    """
     h, w, c = cube.shape
     flat = cube.reshape(-1, c)
-    mean = flat.mean(axis=0, keepdims=True)
-    std = flat.std(axis=0, keepdims=True) + 1e-6
+    train_flat = flat[fit_indices]
+    mean = train_flat.mean(axis=0, keepdims=True)
+    std = train_flat.std(axis=0, keepdims=True) + 1e-6
     flat = (flat - mean) / std
     if components and components < c:
-        train_pixels = labels.reshape(-1) > 0
-        pca = PCA(n_components=components, random_state=seed, whiten=False)
-        pca.fit(flat[train_pixels])
+        actual_components = min(int(components), c, max(1, len(fit_indices)))
+        pca = PCA(n_components=actual_components, random_state=seed, whiten=False)
+        pca.fit(flat[fit_indices])
         flat = pca.transform(flat)
     return flat.reshape(h, w, -1).astype(np.float32)
 
@@ -138,8 +145,9 @@ class HSIPatchDataset(Dataset):
 
 def create_dataloaders(cfg: Dict, seed: int):
     data = load_hsi(cfg, seed)
-    cube = normalize_and_reduce(data.cube, data.labels, cfg["dataset"]["pca_components"], seed)
     train_idx, val_idx, test_idx = stratified_indices(data.labels, cfg, seed)
+    cube = normalize_and_reduce(data.cube, train_idx, cfg["dataset"]["pca_components"], seed)
+    cfg.setdefault("runtime", {})["spectral_dim"] = int(cube.shape[-1])
     patch_size = cfg["dataset"]["patch_size"]
     batch_size = cfg["training"]["batch_size"]
     workers = cfg["training"].get("num_workers", 0)
@@ -148,4 +156,3 @@ def create_dataloaders(cfg: Dict, seed: int):
         ds = HSIPatchDataset(cube, data.labels, indices, patch_size)
         loaders[split] = DataLoader(ds, batch_size=batch_size, shuffle=shuffle, num_workers=workers)
     return loaders, data.num_classes
-

@@ -1,0 +1,19 @@
+{
+  "config": "configs\\synthetic.yaml",
+  "device": "cpu",
+  "input": {
+    "batch_size": 128,
+    "spectral_dim": 32,
+    "patch_size": 9
+  },
+  "parameters": {
+    "total": 223938,
+    "trainable": 223938
+  },
+  "latency": {
+    "runs": 2,
+    "batch_latency_ms": 54.3416000000434,
+    "sample_latency_ms": 0.42454375000033906
+  },
+  "note": "Compare this report with the same profiling protocol for Transformer and Mamba baselines before claiming efficiency."
+}
