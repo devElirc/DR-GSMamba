@@ -6,12 +6,7 @@ import torch.nn.functional as F
 
 
 class SpectralSSMBlock(nn.Module):
-    """A lightweight state-space-style spectral mixer.
-
-    This dependency-free fallback is not a CUDA selective-scan Mamba kernel.
-    Keep paper wording precise unless this block is replaced by an official
-    Mamba implementation for the final benchmark.
-    """
+    """Legacy lightweight state-space-style spectral mixer."""
 
     def __init__(self, dim: int):
         super().__init__()
@@ -29,6 +24,57 @@ class SpectralSSMBlock(nn.Module):
         return residual + self.out_proj(y)
 
 
+class SelectiveScanMambaBlock(nn.Module):
+    """Mamba-style selective state-space block implemented in plain PyTorch.
+
+    This follows the selective-scan idea: input-dependent delta, B, and C
+    parameters drive a recurrent state update along the spectral sequence.
+    It is slower than fused CUDA kernels, but it keeps the method reproducible
+    on machines where official selective-scan extensions are unavailable.
+    """
+
+    def __init__(self, dim: int, state_dim: int = 8, expand: int = 1, dt_rank: int = 8):
+        super().__init__()
+        self.dim = dim
+        self.inner_dim = dim * expand
+        self.state_dim = state_dim
+        self.in_proj = nn.Linear(dim, self.inner_dim * 2)
+        self.conv = nn.Conv1d(self.inner_dim, self.inner_dim, kernel_size=3, padding=1, groups=self.inner_dim)
+        self.x_proj = nn.Linear(self.inner_dim, dt_rank + 2 * state_dim)
+        self.dt_proj = nn.Linear(dt_rank, self.inner_dim)
+        self.A_log = nn.Parameter(torch.log(torch.arange(1, state_dim + 1, dtype=torch.float32)).repeat(self.inner_dim, 1))
+        self.D = nn.Parameter(torch.ones(self.inner_dim))
+        self.out_proj = nn.Linear(self.inner_dim, dim)
+        self.norm = nn.LayerNorm(dim)
+
+    def selective_scan(self, u: torch.Tensor, delta: torch.Tensor, b_par: torch.Tensor, c_par: torch.Tensor) -> torch.Tensor:
+        batch, length, channels = u.shape
+        state = u.new_zeros(batch, channels, self.state_dim)
+        a = -torch.exp(self.A_log).to(dtype=u.dtype, device=u.device)
+        outputs = []
+        for step in range(length):
+            dt = F.softplus(delta[:, step]).unsqueeze(-1)
+            d_a = torch.exp(dt * a.unsqueeze(0))
+            d_b = dt * b_par[:, step].unsqueeze(1) * u[:, step].unsqueeze(-1)
+            state = state * d_a + d_b
+            y = (state * c_par[:, step].unsqueeze(1)).sum(dim=-1) + self.D * u[:, step]
+            outputs.append(y)
+        return torch.stack(outputs, dim=1)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        residual = x
+        xz = self.in_proj(self.norm(x))
+        x_part, z_part = xz.chunk(2, dim=-1)
+        x_part = self.conv(x_part.transpose(1, 2)).transpose(1, 2)
+        x_part = F.silu(x_part)
+        params = self.x_proj(x_part)
+        dt_token, b_par, c_par = torch.split(params, [self.dt_proj.in_features, self.state_dim, self.state_dim], dim=-1)
+        delta = self.dt_proj(dt_token)
+        y = self.selective_scan(x_part, delta, b_par, c_par)
+        y = y * F.silu(z_part)
+        return residual + self.out_proj(y)
+
+
 class SpectralEncoder(nn.Module):
     def __init__(self, spectral_dim: int, hidden_dim: int, depth: int):
         super().__init__()
@@ -40,6 +86,22 @@ class SpectralEncoder(nn.Module):
         x = self.embed(spectrum.unsqueeze(-1))
         for block in self.blocks:
             x = block(x)
+        return self.pool(x.transpose(1, 2)).squeeze(-1)
+
+
+class SpectralMambaEncoder(nn.Module):
+    def __init__(self, spectral_dim: int, hidden_dim: int, depth: int):
+        super().__init__()
+        self.embed = nn.Linear(1, hidden_dim)
+        self.blocks = nn.ModuleList([SelectiveScanMambaBlock(hidden_dim) for _ in range(depth)])
+        self.norm = nn.LayerNorm(hidden_dim)
+        self.pool = nn.AdaptiveAvgPool1d(1)
+
+    def forward(self, spectrum: torch.Tensor) -> torch.Tensor:
+        x = self.embed(spectrum.unsqueeze(-1))
+        for block in self.blocks:
+            x = block(x)
+        x = self.norm(x)
         return self.pool(x.transpose(1, 2)).squeeze(-1)
 
 
@@ -92,13 +154,15 @@ class SpectralCNNEncoder(nn.Module):
 
 
 def build_spectral_encoder(backend: str, spectral_dim: int, hidden_dim: int, depth: int, num_heads: int) -> nn.Module:
+    if backend in {"mamba", "selective_scan"}:
+        return SpectralMambaEncoder(spectral_dim, hidden_dim, depth)
     if backend == "ssm":
         return SpectralEncoder(spectral_dim, hidden_dim, depth)
     if backend == "transformer":
         return SpectralTransformerEncoder(spectral_dim, hidden_dim, depth, num_heads=num_heads)
     if backend == "cnn":
         return SpectralCNNEncoder(spectral_dim, hidden_dim, depth)
-    raise ValueError(f"Unknown spectral backend: {backend}. Expected one of: ssm, transformer, cnn.")
+    raise ValueError(f"Unknown spectral backend: {backend}. Expected one of: mamba, selective_scan, ssm, transformer, cnn.")
 
 
 class SpatialStem(nn.Module):
@@ -161,7 +225,7 @@ class DRGSMamba(nn.Module):
         use_spectral: bool = True,
         use_graph: bool = True,
         use_prototype: bool = True,
-        spectral_backend: str = "ssm",
+        spectral_backend: str = "mamba",
         spectral_heads: int = 4,
         **_: int,
     ):

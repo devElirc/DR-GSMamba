@@ -40,7 +40,7 @@ def run_epoch(model, loader, optimizer, device, cfg, train: bool, tracker: Robus
 @torch.no_grad()
 def evaluate(model, loader, device, num_classes):
     model.eval()
-    all_true, all_pred, all_prob, all_unc = [], [], [], []
+    all_true, all_pred, all_prob, all_unc, all_indices = [], [], [], [], []
     for batch in loader:
         patch = batch["patch"].to(device)
         spectrum = batch["spectrum"].to(device)
@@ -51,8 +51,13 @@ def evaluate(model, loader, device, num_classes):
         all_pred.extend(outputs["logits"].argmax(dim=-1).cpu().numpy().tolist())
         all_prob.extend(probs.cpu().numpy().tolist())
         all_unc.extend(outputs["uncertainty"].cpu().numpy().tolist())
+        all_indices.extend(batch["index"].cpu().numpy().tolist())
     metrics = classification_metrics(all_true, all_pred, num_classes, y_prob=all_prob)
     metrics["mean_uncertainty"] = float(np.mean(all_unc))
+    metrics["prediction_indices"] = [int(x) for x in all_indices]
+    metrics["prediction_labels"] = [int(x) for x in all_pred]
+    metrics["prediction_true"] = [int(x) for x in all_true]
+    metrics["prediction_uncertainty"] = [float(x) for x in all_unc]
     return metrics
 
 

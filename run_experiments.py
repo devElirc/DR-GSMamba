@@ -61,7 +61,7 @@ def main():
     parser.add_argument("--disable-spectral", action="store_true", help="Disable spectral state-space branch.")
     parser.add_argument(
         "--spectral-backend",
-        choices=["ssm", "transformer", "cnn"],
+        choices=["mamba", "selective_scan", "ssm", "transformer", "cnn"],
         default=None,
         help="Replace the spectral branch for controlled ablations.",
     )

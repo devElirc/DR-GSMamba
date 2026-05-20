@@ -1,7 +1,7 @@
 project: DR-GSMamba
 dataset:
   name: houston2013
-  root: ../SCATNet_Codebase_update/data/houston2013
+  root: data/houston2013
   data_file: Houston2013.mat
   gt_file: Houston2013_gt.mat
   data_key: null
@@ -24,7 +24,7 @@ model:
   hidden_dim: 128
   graph_nodes: 81
   depth: 4
-  spectral_backend: ssm
+  spectral_backend: mamba
   spectral_heads: 4
   use_spectral: true
   use_graph: true

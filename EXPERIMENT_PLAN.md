@@ -56,7 +56,24 @@ Avoid relying only on two small saturated datasets.
 
 Recent Transformer/Mamba methods should be included when official code or fair reimplementation is possible.
 
-The repository includes a shallow baseline runner for SVM, random forest, and kNN. These are not enough for a journal paper by themselves; they are only the first baseline group.
+The repository includes a shallow baseline runner for SVM, random forest, and kNN. It also includes a neural baseline runner for spectral MLP, 2D-CNN, compact 3D-CNN, HybridSN-style, SpectralFormer-style, SSFTT-style, nonlocal GCN-style, and Mamba/selective-scan spectral models. These strengthen the code package, but final TGRS/Pattern Recognition experiments should still include official implementations where available, especially for the most recent Mamba baselines.
+
+## Qualitative Evidence
+
+Generate classification maps, error maps, and uncertainty maps for every real dataset. Scalar metrics alone are not enough for a strong journal submission because reviewers often expect visual inspection of boundary regions, rare classes, and spatial consistency.
+
+## Literature Monitoring
+
+Keep `LITERATURE_TRACKING.md` updated with recent HSI classification papers, including the HSI-related updates shared by Minchao Ye when available. This tracking should directly inform:
+
+- related-work coverage;
+- final baseline selection;
+- novelty-risk checks against recent Mamba, graph, Transformer, diffusion, uncertainty, domain-adaptation, and foundation-style HSI methods;
+- reviewer-facing justification for why each recent method is included as a baseline, cited only as related work, or excluded due to unavailable code or unfair protocol mismatch.
+
+The current high-priority Minchao Ye update batch includes recent TGRS work on diffusion-enhanced uncertainty attention, meta-learning with feature alignment, adaptive graph modeling with self-training, discriminative Vision Transformers, and Multi-CycleGAN cross-domain mapping. Before final benchmark runs, freeze the baseline list and verify that no important recent HSI method from the tracked updates is silently ignored.
+
+Local PDF review added three important cross-domain/cross-scene references: CD-MFA, CDWOASA, and CDIRF. For the current single-scene label-scarce protocol, these should be cited as related work and novelty-boundary references rather than direct baselines. If the project is extended to cross-scene or heterogeneous transfer, CD-MFA becomes a high-priority deep baseline, while CDWOASA and CDIRF become classical feature-selection baselines.
 
 ## Commands
 
@@ -80,6 +97,18 @@ Shallow baselines:
 
 ```bash
 python scripts/run_shallow_baselines.py --config configs/indian_pines.yaml --seeds 10
+```
+
+Deep neural baselines:
+
+```bash
+python scripts/run_deep_baselines.py --config configs/indian_pines.yaml --seeds 10 --out-dir outputs/deep_baselines_indian_pines
+```
+
+Classification, error, and uncertainty maps:
+
+```bash
+python scripts/generate_classification_maps.py --config configs/indian_pines.yaml --metrics outputs/indian_pines/seed_0/metrics.json --out-dir paper/figures/maps_indian_pines
 ```
 
 Efficiency evidence:

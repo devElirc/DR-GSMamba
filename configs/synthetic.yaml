@@ -27,7 +27,7 @@ model:
   hidden_dim: 96
   graph_nodes: 81
   depth: 3
-  spectral_backend: ssm
+  spectral_backend: mamba
   spectral_heads: 4
   use_spectral: true
   use_graph: true

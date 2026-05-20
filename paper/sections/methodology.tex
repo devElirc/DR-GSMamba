@@ -10,14 +10,18 @@ For a labeled pixel at position $(i,j)$, the input consists of the center spectr
 \label{fig:architecture}
 \end{figure*}
 
-\subsection{Spectral State-Space Encoder}
-The center spectrum is treated as a one-dimensional ordered sequence. Each scalar band value is projected into a hidden feature space. The sequence is then processed by stacked state-space-style blocks. Each block contains layer normalization, gated projection, depthwise sequence mixing, and residual projection. This dependency-free implementation is used as a reproducible spectral SSM-style backbone; if an official selective-scan Mamba kernel is used in final experiments, the same interface can be retained while replacing this block.
+\subsection{Spectral Selective-Scan Encoder}
+The center spectrum is treated as a one-dimensional ordered sequence. Each scalar band value is projected into a hidden feature space. The sequence is then processed by stacked Mamba-style selective-scan blocks. Each block contains layer normalization, input projection, depthwise local mixing, input-dependent state parameters, recurrent selective scanning, gated output projection, and residual connection. The implementation is written in plain PyTorch for reproducibility; it follows the selective state-space update used by Mamba-style models, while avoiding dependence on fused CUDA kernels that may be unavailable on reviewer machines.
 
-Let $\mathbf{Z}^{(0)}\in\mathbb{R}^{C\times d}$ be the embedded spectral sequence. For the $l$-th block, the update is written as
+Let $\mathbf{Z}^{(0)}\in\mathbb{R}^{C\times d}$ be the embedded spectral sequence. For the $l$-th block, the selective state update at spectral position $t$ is written as
 \begin{equation}
-\mathbf{Z}^{(l+1)}=\mathbf{Z}^{(l)}+\phi_{\theta}\left(\mathrm{LN}(\mathbf{Z}^{(l)})\right),
+\mathbf{h}_{t}=\exp(\Delta_t\mathbf{A})\mathbf{h}_{t-1}+\Delta_t\mathbf{B}_t\mathbf{u}_t,
 \end{equation}
-where $\phi_{\theta}(\cdot)$ denotes gated depthwise sequence mixing. The final spectral representation $\mathbf{f}_{spec}$ is obtained by global average pooling over the sequence dimension.
+where $\Delta_t$, $\mathbf{B}_t$, and $\mathbf{C}_t$ are generated from the input token, and $\mathbf{A}$ is a learned diagonal state matrix. The output token is
+\begin{equation}
+\mathbf{y}_{t}=\mathbf{C}_{t}\mathbf{h}_{t}+\mathbf{D}\mathbf{u}_{t}.
+\end{equation}
+The final spectral representation $\mathbf{f}_{spec}$ is obtained by gated projection and global average pooling over the sequence dimension.
 
 \subsection{Patch Graph Reasoning}
 Spatial features are extracted from $\mathbf{P}_{ij}$ using a compact convolutional stem. The resulting feature map is reshaped into $N=p^2$ patch nodes. Each node corresponds to one spatial location inside the patch. To build a soft graph, node features are normalized and their pairwise similarities define an adjacency matrix:

@@ -1,0 +1,41 @@
+project: DR-GSMamba
+dataset:
+  name: pavia_centre
+  root: data/pavia_centre
+  data_file: Pavia.mat
+  gt_file: Pavia_gt.mat
+  data_key: pavia
+  gt_key: pavia_gt
+  pca_components: 30
+  patch_size: 9
+  train_ratio: 0.05
+  val_ratio: 0.05
+  samples_per_class: 20
+training:
+  seeds: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+  epochs: 80
+  batch_size: 128
+  lr: 0.001
+  weight_decay: 0.0001
+  device: auto
+  num_workers: 0
+model:
+  spectral_dim: 30
+  hidden_dim: 128
+  graph_nodes: 81
+  depth: 4
+  spectral_backend: mamba
+  spectral_heads: 4
+  use_spectral: true
+  use_graph: true
+  use_prototype: true
+loss:
+  robust_alpha: 0.3
+  risk_ema_momentum: 0.9
+  robust_weight: 0.3
+  prototype_weight: 0.1
+  prototype_supervised_weight: 0.05
+  uncertainty_weight: 0.05
+  graph_smooth_weight: 0.02
+outputs:
+  dir: outputs/pavia_centre

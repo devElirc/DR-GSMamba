@@ -140,6 +140,9 @@ class HSIPatchDataset(Dataset):
             "patch": torch.from_numpy(patch.transpose(2, 0, 1)).float(),
             "spectrum": torch.from_numpy(spectrum).float(),
             "label": torch.tensor(label).long(),
+            "index": torch.tensor(flat_idx).long(),
+            "row": torch.tensor(row).long(),
+            "col": torch.tensor(col).long(),
         }
 
 
