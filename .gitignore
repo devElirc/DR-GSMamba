@@ -46,3 +46,7 @@ Thumbs.db
 *.npy
 *.npz
 
+related_paper/
+SCATNet_Codebase_update/
+task_details/
+
