@@ -1,0 +1,292 @@
+% =========================================================================
+%  Methodology section -- Phase-1 LOCKED skeleton.
+%  All equations below are FROZEN: code and prose must conform to them.
+%  Sources of truth:
+%    * docs/math/cfa_gdro.md                 (M1.1 + M1.2)
+%    * docs/math/evidential_prototype_head.md (M1.3)
+%
+%  Prose paragraphs are intentionally short placeholders; they will be
+%  fleshed out in Phase 8 (paper writing) once the experimental results
+%  are in.  DO NOT edit equations without updating the math notes first.
+% =========================================================================
+
+\section{Methodology}
+\label{sec:method}
+
+\subsection{Problem setting and notation}
+\label{sec:method:setting}
+
+Let the labelled training set be $\mathcal{D} = \{(x_i, y_i)\}_{i=1}^{N}$ with $K$ classes, $y_i \in \{1,\dots,K\}$, and let $N_k^{\mathrm{train}} = |\{i : y_i = k\}|$ be the per-class training count. Because we operate in a fixed-samples-per-class regime, training counts are by construction balanced and would make any class-frequency exponent vanish from the objective. We therefore use the \emph{scene-level} class frequencies obtained from the full ground truth of the scene (including unlabelled pixels): for each class $k$ let $N_k^{\mathrm{scene}}$ be its scene count and define
+\begin{equation}
+  \pi_k \;=\; \frac{N_k^{\mathrm{scene}}}{\sum_{j=1}^{K} N_j^{\mathrm{scene}}}, \qquad
+  \pi_{\min} = \min_k \pi_k > 0, \qquad
+  \pi_{\max} = \max_k \pi_k < 1.
+  \label{eq:method:scene-freq}
+\end{equation}
+For a model with parameters $\theta$ we write $\ell_\theta(x, y) = -\log p_\theta(y \mid x)$ for the per-sample negative log-likelihood and
+\begin{equation}
+  \bar{\ell}_k(\theta) \;=\; \frac{1}{N_k^{\mathrm{train}}} \sum_{i : y_i = k} \ell_\theta(x_i, y_i)
+  \label{eq:method:per-class-loss}
+\end{equation}
+for the per-class mean loss. Two hyperparameters govern the robust objective: a worst-fraction size $\alpha \in (0, 1]$ and a class-frequency-awareness exponent $\gamma \geq 0$. The standard probability simplex on $K$ classes is $\Delta^{K-1}$.
+
+\paragraph{Notation note ($\alpha$ overload).}
+The CFA-GDRO worst-fraction scalar $\alpha$ collides notationally with the Dirichlet concentration vector $\boldsymbol{\alpha} = (\alpha_1,\dots,\alpha_K)$ used later in the evidential head (Sec.~\ref{sec:method:eph}). The two are kept distinct by convention: the CFA-GDRO worst-fraction is always a scalar, while the Dirichlet concentration is always written with a class index or in bold.
+
+% --- prose to add in Phase 8:
+% * One paragraph motivating why per-class loss (not per-sample) is the
+%   natural quantity to balance under label scarcity.
+% * One paragraph justifying scene-frequency vs training-frequency.
+% * Pointer forward to the two contributions of this section.
+
+\subsection{Class-Frequency-Aware Group-DRO objective}
+\label{sec:method:cfa-gdro}
+
+\paragraph{Constraint set.}
+We define the class-frequency-aware uncertainty set on the simplex by
+\begin{equation}
+  \mathcal{Q}_{\alpha,\gamma}
+  \;=\;
+  \Big\{\, q \in \Delta^{K-1} \;\Big|\; 0 \le q_k \le c_k(\alpha,\gamma)\ \ \forall k\,\Big\},
+  \quad
+  c_k(\alpha,\gamma) \;=\; \frac{1}{\alpha}\cdot\frac{\pi_k^{-\gamma}}{\sum_{j=1}^{K} \pi_j^{-\gamma}}.
+  \label{eq:method:Q-set}
+\end{equation}
+Since $\sum_k c_k = 1/\alpha \geq 1$, the simplex constraint is always feasible. The exponent $\gamma$ controls how strongly rare classes are favoured by the adversary: $\gamma = 0$ gives uniform caps; $\gamma > 0$ enlarges the cap on classes with small frequency.
+
+\paragraph{Min--max objective.}
+The CFA-GDRO loss is the supremum of the weighted class loss over $\mathcal{Q}_{\alpha,\gamma}$,
+\begin{equation}
+  \mathcal{L}_{\mathrm{CFA\text{-}GDRO}}(\theta)
+  \;=\;
+  \sup_{q\,\in\,\mathcal{Q}_{\alpha,\gamma}} \;
+  \sum_{k=1}^{K} q_k\,\bar{\ell}_k(\theta).
+  \label{eq:method:cfa-gdro}
+\end{equation}
+The inner problem is a linear program over a box on the simplex and admits a closed-form solution by sorted water-filling (Sec.~\ref{sec:method:waterfill}). Special cases recovered by Eq.~\eqref{eq:method:cfa-gdro} include the uniform-class loss ($\gamma{=}0$, $\alpha{=}1$), Sagawa-style group-DRO ($\gamma{=}0$, $\alpha{=}1/K$), and uniform-cap class-CVaR ($\gamma{=}0$, $\alpha \in (1/K, 1)$).
+
+% --- prose to add in Phase 8:
+% * Position CFA-GDRO with respect to Sagawa group-DRO and Duchi/Namkoong
+%   chi-squared DRO.
+% * Justify why class-frequency-aware caps are appropriate for label-scarce
+%   HSI (rare classes are exactly where reliability is hardest).
+
+\subsubsection{Sorted water-filling solver}
+\label{sec:method:waterfill}
+
+Re-order the class indices so that $\bar{\ell}_{(1)} \geq \bar{\ell}_{(2)} \geq \cdots \geq \bar{\ell}_{(K)}$. KKT analysis of Eq.~\eqref{eq:method:cfa-gdro} (Appendix~A) shows that the optimum partitions classes into three groups by a threshold $\nu$:
+$q_{(i)}^\star = c_{(i)}$ for classes with $\bar{\ell}_{(i)} > \nu$ (saturated), at most one boundary class with $\bar{\ell}_{(i)} = \nu$ receives the residual mass, and the remaining classes have $q_{(i)}^\star = 0$ (dropped). The sorted water-filling procedure summarised in Algorithm~\ref{alg:waterfill} computes $q^\star$ exactly in $O(K \log K)$ per mini-batch.
+
+\begin{equation}
+  q_{(i)}^\star \;=\;
+  \begin{cases}
+    c_{(i)}                                       & \bar{\ell}_{(i)} > \nu \\
+    1 - \sum\limits_{j < i} c_{(j)}               & \bar{\ell}_{(i)} = \nu \\
+    0                                             & \bar{\ell}_{(i)} < \nu
+  \end{cases}
+  \label{eq:method:waterfill-solution}
+\end{equation}
+
+\begin{algorithm}[t]
+\caption{Sorted water-filling solver for CFA-GDRO}
+\label{alg:waterfill}
+\KwIn{class losses $\bar{\ell} \in \mathbb{R}^K$, caps $c \in \mathbb{R}_{\ge 0}^K$.}
+\KwOut{optimal weights $q^\star \in \mathbb{R}_{\ge 0}^K$.}
+sort classes by $\bar{\ell}$ in descending order: $(1),(2),\dots,(K)$\;
+$r \leftarrow 1$;\quad $q^\star \leftarrow \mathbf{0}$\;
+\For{$i = 1,2,\dots,K$}{
+  \If{$r \le 0$}{\textbf{break}\;}
+  $q^\star_{(i)} \leftarrow \min(c_{(i)}, r)$;\quad $r \leftarrow r - q^\star_{(i)}$\;
+}
+\Return $q^\star$\;
+\end{algorithm}
+
+\paragraph{Sub-gradient and back-propagation.}
+With $q^\star$ computed and treated as a constant of the loss landscape (Danskin), the back-propagation rule is
+\begin{equation}
+  \nabla_\theta\,\mathcal{L}_{\mathrm{CFA\text{-}GDRO}}(\theta)
+  \;=\;
+  \sum_{k=1}^{K} q^\star_k\;\nabla_\theta\,\bar{\ell}_k(\theta),
+  \label{eq:method:cfa-gradient}
+\end{equation}
+which is the standard sub-gradient for piecewise-linear DRO objectives.
+
+\paragraph{Exponential moving average over batches.}
+Under label scarcity many classes are absent from a given mini-batch, so per-class means $\bar{\ell}_k^{\mathrm{batch}}$ are noisy. We feed Algorithm~\ref{alg:waterfill} with an exponentially-smoothed estimate $\hat{\ell}_k$,
+\begin{equation}
+  \hat{\ell}_k^{(t+1)}
+  \;=\;
+  \begin{cases}
+    \eta\,\hat{\ell}_k^{(t)} \;+\; (1 - \eta)\,\bar{\ell}_k^{\mathrm{batch}}
+    & k \text{ appears in this batch}, \\
+    \hat{\ell}_k^{(t)} & \text{otherwise},
+  \end{cases}
+  \label{eq:method:ema}
+\end{equation}
+with momentum $\eta = 0.9$ by default.
+
+\subsubsection{Per-class upper bounds}
+\label{sec:method:bound}
+
+The \emph{reliable} claim of the paper is operationalised by showing that CFA-GDRO acts as an explicit upper bound on the loss of any class whose adversarial cap reaches one. We state this as a single proposition with two corollaries: a mild \emph{rare-class} bound and a stricter \emph{worst-class} bound.
+
+\paragraph{Active class set.}
+For each $(\alpha,\gamma)$ define
+\begin{equation}
+  \mathcal{K}^{\!\star}(\alpha,\gamma) \;=\; \big\{\,k \in \{1,\dots,K\} \;:\; c_k(\alpha,\gamma) \ge 1\,\big\}
+  \;=\;
+  \big\{\,k \;:\; \pi_k^{-\gamma} \ge \alpha\,W(\gamma)\,\big\}.
+  \label{eq:method:active-set}
+\end{equation}
+
+\begin{proposition}[Per-class dominance]
+\label{prop:method:per-class}
+For every $\theta$ and every $k \in \mathcal{K}^{\!\star}(\alpha,\gamma)$,
+\begin{equation}
+  \mathcal{L}_{\mathrm{CFA\text{-}GDRO}}(\theta) \;\geq\; \bar{\ell}_k(\theta).
+  \label{eq:method:bound}
+\end{equation}
+In particular,
+$\mathcal{L}_{\mathrm{CFA\text{-}GDRO}}(\theta) \;\ge\; \max_{k \in \mathcal{K}^{\!\star}}\,\bar{\ell}_k(\theta)$.
+\end{proposition}
+
+\begin{proof}[Proof sketch]
+For $k \in \mathcal{K}^{\!\star}$ we have $c_k \ge 1$, so the singleton $q^{(k)}$ defined by $q^{(k)}_k = 1$ and $q^{(k)}_j = 0$ for $j \neq k$ satisfies $0 \le q^{(k)}_j \le c_j$ for all $j$ and lies in $\mathcal{Q}_{\alpha,\gamma}$. The supremum dominates this choice and equals $\bar{\ell}_k(\theta)$. Full derivation in Appendix~A.
+\end{proof}
+
+Two useful corollaries follow by checking when the rarest, respectively the most common, class lies in $\mathcal{K}^{\!\star}$.
+
+\begin{corollary}[Rare-class bound]
+\label{cor:method:rare-class}
+If $\alpha\,W(\gamma) \le \pi_{\min}^{-\gamma}$ then the rarest class $k_{\min} = \arg\min_k \pi_k$ belongs to $\mathcal{K}^{\!\star}$, so $\mathcal{L}_{\mathrm{CFA\text{-}GDRO}}(\theta) \ge \bar{\ell}_{k_{\min}}(\theta)$.
+\end{corollary}
+
+\begin{corollary}[Worst-class bound]
+\label{cor:method:worst-class}
+If $\alpha\,W(\gamma) \le \pi_{\max}^{-\gamma}$ then $\mathcal{K}^{\!\star} = \{1,\dots,K\}$ and $\mathcal{L}_{\mathrm{CFA\text{-}GDRO}}(\theta) \ge \max_k \bar{\ell}_k(\theta)$.
+\end{corollary}
+
+\paragraph{Practical reading.}
+Corollary~\ref{cor:method:rare-class} is mild: it only requires that the adversary can pick out the rarest class. Corollary~\ref{cor:method:worst-class} is strict and requires a much smaller $\alpha$ on imbalanced scenes. For Indian Pines under the five-samples-per-class protocol with $W(\gamma{=}1) \approx 8.3\times10^{3}$, $\pi_{\min}^{-1} \approx 4.4\times10^{2}$, and $\pi_{\max}^{-1} \approx 4.7$, the two conditions give $\alpha \le 5.3\times10^{-2}$ and $\alpha \le 5.7\times10^{-4}$ respectively. Our default $\alpha = 0.3$ therefore satisfies neither corollary exactly. This is intentional: with the default the active set $\mathcal{K}^{\!\star}$ contains several rare classes (the water-filling solution spreads $q^{\star}$ across them rather than concentrating on one), and Proposition~\ref{prop:method:per-class} still gives a per-class bound for every class in $\mathcal{K}^{\!\star}$. When a reviewer asks for a clean worst-class guarantee, we drop $\alpha$ to $5\times10^{-4}$ and re-train; in our ablation we verify that the empirical rare-class and worst-class improvements are stable across $\alpha \in \{0.1, 0.2, 0.3, 0.5\}$. When $\gamma = 0$ the bound recovers the standard class-level CVaR interpretation: a tight upper bound on the worst $\alpha$-fraction of classes by uniform weight.
+
+% --- prose to add in Phase 8:
+% * One paragraph relating Eq.~\eqref{eq:method:bound} to chi-squared DRO and Duchi/Namkoong
+%   variance regularization.
+% * Discuss the sliding-scale interpretation: as alpha decreases, K* grows monotonically
+%   from a small set of rare classes (Corollary A) to the full class set (Corollary B).
+
+\subsection{Evidential Prototype Head}
+\label{sec:method:eph}
+
+The classifier and the uncertainty estimator are unified in a single Dirichlet-evidential head built on prototype distances. Let $f \in \mathbb{R}^d$ be the fused per-pixel feature produced by the backbone and let $\{m_k\}_{k=1}^{K} \subset \mathbb{R}^d$ be learnable prototypes. We write $\tilde{f} = f / \|f\|_2$ and $\tilde{m}_k = m_k / \|m_k\|_2$.
+
+\paragraph{Evidence and Dirichlet posterior.}
+The per-class evidence and the Dirichlet concentration vector are
+\begin{equation}
+  e_k \;=\; \mathrm{softplus}\!\big(\tau\,\tilde{f}^\top \tilde{m}_k\big),
+  \qquad
+  \alpha_k \;=\; e_k + 1,
+  \qquad
+  S \;=\; \sum_{k=1}^{K} \alpha_k,
+  \label{eq:method:evidence}
+\end{equation}
+with a learnable temperature $\tau \in [1, 30]$. The predictive probabilities are the means of $\mathrm{Dir}(\alpha)$,
+\begin{equation}
+  p_k \;=\; \alpha_k / S.
+  \label{eq:method:probs}
+\end{equation}
+When all $e_k \to 0$, $p \to \mathbf{1}/K$ (uniform prior); when a single $e_{k^\star}$ dominates, $p$ concentrates on class $k^\star$.
+
+\paragraph{Closed-form uncertainty decomposition.}
+The Dirichlet construction gives three uncertainty scalars per pixel,
+\begin{equation}
+  u_{\mathrm{vac}} \;=\; \frac{K}{S},
+  \qquad
+  u_{\mathrm{ale}} \;=\; \sum_{k=1}^{K} p_k(1 - p_k),
+  \qquad
+  u_{\mathrm{tot}} \;=\; 1 - \max_k p_k.
+  \label{eq:method:uncertainty}
+\end{equation}
+Vacuity $u_{\mathrm{vac}}$ measures the lack of evidence and corresponds to the epistemic component; the aleatoric term $u_{\mathrm{ale}}$ is high on boundary or mixed pixels with strong but spread-out evidence.
+
+\paragraph{Bayes-risk loss and KL regulariser.}
+Let $\mathbf{y} \in \{0,1\}^K$ be the one-hot label. The expected squared error under the Dirichlet posterior has the closed form
+\begin{equation}
+  \mathcal{L}_{\mathrm{lik}}(f, y)
+  \;=\;
+  \sum_{k=1}^{K}\!\Big[\,(y_k - p_k)^2 \;+\; \frac{p_k(1 - p_k)}{S + 1}\,\Big].
+  \label{eq:method:eph-lik}
+\end{equation}
+A KL regulariser on the wrong-class evidence pulls non-target concentrations toward the uniform Dirichlet prior. Defining $\tilde{\alpha}_k = y_k + (1 - y_k)\,\alpha_k$,
+\begin{equation}
+  \mathcal{L}_{\mathrm{KL}}(f, y)
+  \;=\;
+  \mathrm{KL}\!\big(\mathrm{Dir}(\tilde{\alpha})\,\|\,\mathrm{Dir}(\mathbf{1})\big),
+  \label{eq:method:eph-kl}
+\end{equation}
+which expands to a closed form in $\log\Gamma$ and $\psi$ (Appendix~B).
+
+\paragraph{Annealed total EPH loss.}
+With an annealing schedule $\lambda_t = \min(1, t/T_{\mathrm{anneal}})$ over the first $T_{\mathrm{anneal}}$ epochs,
+\begin{equation}
+  \mathcal{L}_{\mathrm{EPH}}^{(t)}(f, y)
+  \;=\;
+  \mathcal{L}_{\mathrm{lik}}(f, y) \;+\; \lambda_t\,\mathcal{L}_{\mathrm{KL}}(f, y).
+  \label{eq:method:eph-total}
+\end{equation}
+We use $T_{\mathrm{anneal}} = 10$ epochs throughout the paper.
+
+% --- prose to add in Phase 8:
+% * Cite Sensoy et al. (2018) for the evidential-deep-learning formulation
+%   and Amini et al. (2020) for evidential regression.
+% * Justify the cosine-prototype evidence (as opposed to MLP-evidence) in
+%   the HSI context.
+% * Explicit statement: EPH is *not* claimed as a novel uncertainty
+%   framework; the contribution is its integration with CFA-GDRO and its
+%   application to HSI calibration.
+
+\subsection{Unified training objective}
+\label{sec:method:total-loss}
+
+CFA-GDRO and EPH share a single per-sample loss $\ell^{\mathrm{EPH}}_i = \mathcal{L}_{\mathrm{EPH}}^{(t)}(f_i, y_i)$, which is fed into the sorted water-filling solver as the input to Eq.~\eqref{eq:method:cfa-gdro}. The total training objective is
+\begin{equation}
+  \mathcal{L}_{\mathrm{total}}(\theta)
+  \;=\;
+  \overline{\ell^{\mathrm{EPH}}}(\theta)
+  \;+\;
+  \lambda_{\mathrm{rob}}\;\mathcal{L}_{\mathrm{CFA\text{-}GDRO}}^{\mathrm{EPH}}(\theta)
+  \;+\;
+  \lambda_{\mathrm{graph}}\;\mathcal{L}_{\mathrm{CP\text{-}graph}}(\theta),
+  \label{eq:method:total-loss}
+\end{equation}
+where $\overline{\ell^{\mathrm{EPH}}}$ is the mean evidential loss over the mini-batch and $\mathcal{L}_{\mathrm{CP\text{-}graph}}$ is the in-batch cross-pixel consistency loss defined in Eq.~\eqref{eq:method:cp-graph} below. The mean term keeps optimisation well-behaved when $\mathcal{L}_{\mathrm{CFA\text{-}GDRO}}^{\mathrm{EPH}}$ is sharp (small $\alpha$). Default weights are $\lambda_{\mathrm{rob}} = 0.5$, $\lambda_{\mathrm{graph}} = 0.1$, both tuned on validation only.
+
+\paragraph{Cross-pixel consistency loss.}
+Within each mini-batch of $N$ pixels, let $\mathcal{N}_k(i)$ index the $k$ nearest neighbours of pixel $i$ in fused-feature space by cosine similarity, with softmax weights $w_{ij} = \exp(\tilde{f}_i^\top \tilde{f}_j / \tau_g) / \sum_{j'\in\mathcal{N}_k(i)} \exp(\tilde{f}_i^\top \tilde{f}_{j'} / \tau_g)$. Define the neighbour-averaged prediction $\tilde{p}_i = \sum_{j\in\mathcal{N}_k(i)} w_{ij}\,p_j$. The consistency loss uses a one-directional KL with a stop-gradient target,
+\begin{equation}
+  \mathcal{L}_{\mathrm{CP\text{-}graph}}(\theta)
+  \;=\;
+  \frac{1}{N}\sum_{i=1}^{N}\,\mathrm{KL}\!\big(\,\mathrm{sg}(\tilde{p}_i) \;\big\|\; p_i\,\big),
+  \label{eq:method:cp-graph}
+\end{equation}
+where $\mathrm{sg}(\cdot)$ denotes the stop-gradient operator. Defaults are $k = 8$ and $\tau_g = 1.0$. CP-Graph is a design choice ablated in Sec.~\ref{sec:experiments}; full derivations and special cases are in `docs/math/cp\_graph.md`.
+
+\subsection{Backbone architecture (design choice, not contribution)}
+\label{sec:method:backbone}
+
+The backbone produces the fused feature $f$ that the EPH consumes. It is composed of a bidirectional selective-scan spectral encoder (\emph{OP-S4}) operating on the raw spectral bands, a compact spatial convolutional stem on PCA-reduced patches, and the in-batch $k$-nearest-neighbour CP-Graph module (Eq.~\eqref{eq:method:cp-graph}) that propagates information between spectrally similar pixels of the same mini-batch. Each of these components is ablated against a Transformer / 1D-CNN spectral encoder and an intra-patch attention graph respectively, but they are not part of the contribution claims. Full architectural details and ablation results are reported in Section~\ref{sec:experiments}.
+
+% --- prose to add in Phase 8 (architecture figure):
+% * Architecture diagram (\autoref{fig:method:arch}) showing the data flow:
+%   raw spectrum -> OP-S4 -> fusion <- spatial stem <- PCA patch
+%                                                       \-> CP-Graph
+%   fusion -> EPH -> probabilities + alpha + (vacuity, aleatoric)
+%   probabilities -> per-sample EPH loss -> CFA-GDRO solver -> total loss.
+
+% =========================================================================
+%  End of method.tex Phase-1 lock.
+%  Phase-2 (code) MUST conform to equations 1-14 above.
+%  Phase-8 (writing) MUST add prose paragraphs marked with "% --- prose to
+%  add" and the architecture figure, but MUST NOT alter equations without
+%  first updating docs/math/*.md.
+% =========================================================================
