@@ -1,0 +1,17 @@
+# Top-level defaults. Resolved by hsi_robust.utils.load_config (Phase 2B).
+# Each entry under `defaults` is a path relative to configs/.
+# Override by composing on the command line, e.g.:
+#   python scripts/train.py --config configs/defaults.yaml \
+#                           --override dataset=pavia_university training=label_5
+
+defaults:
+  dataset: indian_pines
+  model: dr_gsmamba
+  training: default
+
+seed: 0
+output_dir: outputs
+deterministic: true   # torch.use_deterministic_algorithms(True, warn_only=True)
+log_every: 50
+val_every: 1
+save_every: 50

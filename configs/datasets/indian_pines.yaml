@@ -1,0 +1,27 @@
+# Indian Pines, AVIRIS, 1992. 200 retained bands (after removing water-absorption bands).
+name: indian_pines
+data_dir: data/indian_pines
+cube_file: Indian_pines_corrected.mat
+gt_file: Indian_pines_gt.mat
+cube_key: indian_pines_corrected
+gt_key: indian_pines_gt
+
+num_bands: 200
+num_classes: 16          # excluding the unlabelled-pixel class
+spatial_size: [145, 145]
+ignore_label: 0          # treat label==0 as unlabelled
+
+# Pre-processing
+normalize: per_band      # per-band z-score; fit on train only
+patch_size: 9            # spatial-stem patch side (odd)
+pca_components: 30       # PCA for the spatial branch; fit on train only
+
+# Label-scarcity protocol (overridable via configs/training/label_*.yaml)
+samples_per_class: 5
+
+# Scene-level class frequencies pi_k are computed at runtime by
+# hsi_robust.data.compute_scene_freq (Phase 2B). The numbers below
+# are reference values from the literature, used only for sanity-checking
+# the computed pi_k.
+reference_pi_min: 2.3e-3
+reference_pi_max: 2.1e-1

@@ -1,0 +1,3 @@
+# Label-scarcity override: 10 samples per class (low regime).
+# Composed on top of configs/training/default.yaml by the Phase 2B config loader.
+samples_per_class: 10

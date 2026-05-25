@@ -1,0 +1,11 @@
+# Dev dependencies: linting, formatting, type checking, testing, pre-commit.
+# Mirrors pyproject.toml [project.optional-dependencies.dev].
+
+-r requirements.txt
+
+pytest>=7.4
+pytest-cov>=4.1
+ruff>=0.1.6
+black>=23.11
+mypy>=1.7
+pre-commit>=3.5

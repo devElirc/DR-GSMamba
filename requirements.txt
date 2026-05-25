@@ -1,0 +1,13 @@
+# Runtime dependencies for the hsi_robust package.
+# These are also declared in pyproject.toml [project.dependencies].
+# Listed here for users who prefer `pip install -r requirements.txt`
+# over `pip install -e .`.
+
+torch>=2.1,<3
+numpy>=1.24
+scipy>=1.10
+scikit-learn>=1.3
+einops>=0.7
+PyYAML>=6.0
+h5py>=3.9
+fvcore>=0.1.5

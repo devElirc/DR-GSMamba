@@ -1,0 +1,33 @@
+# Default model configuration for the full DR-GSMamba backbone + EPH.
+# Architectural choices that are ablated in Phase 7 (see roadmap M7.3).
+
+name: dr_gsmamba
+feature_dim: 128   # output dim of the fusion module that the EPH consumes
+
+# Spectral encoder: OP-S4. Operates on raw bands, not on PCA components.
+op_s4:
+  hidden_dim: 64
+  num_layers: 2
+  bidirectional: true
+  hippo_init: true             # HiPPO-style state matrix initialisation
+  band_importance_gating: true  # learned per-band scalar gate
+
+# Spatial stem: compact 2-D CNN on PCA patches.
+spatial_stem:
+  hidden_dims: [32, 64, 128]
+  kernel_sizes: [3, 3, 3]
+  use_bn: true
+  dropout: 0.1
+
+# Cross-Pixel Affinity Graph (design choice; see docs/math/cp_graph.md).
+cp_graph:
+  k: 8
+  tau_g: 1.0       # graph temperature (separate from EPH temperature)
+  stop_grad_target: true
+
+# Evidential Prototype Head (contribution; see docs/math/evidential_prototype_head.md).
+evidential_head:
+  tau_init: 5.0
+  tau_min: 1.0
+  tau_max: 30.0
+  prototype_init_scale: 0.02

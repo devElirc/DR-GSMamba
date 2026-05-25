@@ -1,0 +1,20 @@
+# Pavia University, ROSIS, 2001. 103 spectral bands after noise removal.
+name: pavia_university
+data_dir: data/pavia_university
+cube_file: PaviaU.mat
+gt_file: PaviaU_gt.mat
+cube_key: paviaU
+gt_key: paviaU_gt
+
+num_bands: 103
+num_classes: 9
+spatial_size: [610, 340]
+ignore_label: 0
+
+normalize: per_band
+patch_size: 9
+pca_components: 15
+samples_per_class: 5
+
+reference_pi_min: 1.6e-2
+reference_pi_max: 4.7e-1

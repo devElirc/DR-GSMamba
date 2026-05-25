@@ -1,0 +1,36 @@
+# Default training configuration. Defaults shown here are the hyperparameter
+# defaults from the math notes (see docs/math/*.md Section 7 of each).
+
+epochs: 200
+batch_size: 64
+num_workers: 4
+pin_memory: true
+
+optimizer:
+  name: adamw
+  lr: 1.0e-3
+  weight_decay: 1.0e-4
+  betas: [0.9, 0.999]
+
+scheduler:
+  name: cosine
+  warmup_epochs: 5
+  min_lr: 1.0e-5
+
+grad_clip: 1.0
+
+# ---------------------------------------------------------------------------
+# Loss configuration. The total objective is:
+#   L_total = mean_EPH + lambda_rob * L_CFA-GDRO + lambda_graph * L_CP-graph
+# (see paper/sections/method.tex Eq. (16)).
+# ---------------------------------------------------------------------------
+loss:
+  cfa_gdro:
+    alpha: 0.3           # docs/math/cfa_gdro.md Section 7
+    gamma: 1.0           # docs/math/cfa_gdro.md Section 7
+    ema_momentum: 0.9    # docs/math/cfa_gdro.md Section 4.4
+    weight: 0.5          # lambda_rob
+  evidential:
+    anneal_epochs: 10    # docs/math/evidential_prototype_head.md Section 7
+  cp_graph:
+    weight: 0.1          # lambda_graph (docs/math/cp_graph.md Section 7)

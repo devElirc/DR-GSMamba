@@ -1,0 +1,22 @@
+# Houston 2013, IEEE GRSS Data Fusion Contest 2013.
+# Acquisition is a Phase-4 deliverable (see roadmap M4.1). Fall-back: WHU-Hi-LongKou.
+name: houston_2013
+data_dir: data/houston_2013
+cube_file: Houston.mat
+gt_file: Houston_gt.mat
+cube_key: Houston
+gt_key: Houston_gt
+
+num_bands: 144
+num_classes: 15
+spatial_size: [349, 1905]
+ignore_label: 0
+
+normalize: per_band
+patch_size: 9
+pca_components: 30
+samples_per_class: 5
+
+# Reference scene frequencies will be filled after Phase 4 acquisition.
+reference_pi_min: null
+reference_pi_max: null
