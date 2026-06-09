@@ -52,3 +52,5 @@ task_details/
 data/
 
 *.mat
+*.mat
+data/*
