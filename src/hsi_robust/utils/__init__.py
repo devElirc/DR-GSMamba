@@ -1,13 +1,12 @@
-"""Cross-cutting utilities: seeding, config loading, logging.
+"""Cross-cutting utilities: config loading, seeding, logging.
 
-Public surface (to be populated alongside Phase 2B onwards):
-
-* ``seed_everything``    - deterministic seeding for python / numpy / torch / cuda.
-* ``load_config``        - YAML loader with simple `defaults` resolution
-  (no Hydra runtime dependency, see roadmap M2A.3).
-* ``get_logger``         - JSON-line logger writing to ``outputs/<run_id>/log.jsonl``.
+Phase 2B exposes :func:`load_yaml`. ``seed_everything`` and ``get_logger`` will
+appear with the Phase 2E training loop.
 """
 
 from __future__ import annotations
 
-__all__: list[str] = []
+from hsi_robust.utils.config import load_yaml
+from hsi_robust.utils.seeding import seed_everything
+
+__all__ = ["load_yaml", "seed_everything"]

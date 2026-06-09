@@ -20,9 +20,13 @@ scheduler:
 grad_clip: 1.0
 
 # ---------------------------------------------------------------------------
-# Loss configuration. The total objective is:
-#   L_total = mean_EPH + lambda_rob * L_CFA-GDRO + lambda_graph * L_CP-graph
-# (see paper/sections/method.tex Eq. (16)).
+# Loss configuration. The total objective (Eq. (4) of docs/math/cfa_gdro.md) is:
+#   L_total = mean_CE
+#             + lambda_rob   * L_CFA-GDRO   (operates on per-sample CE)
+#             + lambda_evi   * L_EPH         (Bayes-risk + annealed KL)
+#             + lambda_graph * L_CP-graph
+# The mean_CE anchor is required to escape the uniform-prediction saddle of
+# the EPH Bayes-risk loss; see decision D-08 in roadmap.md.
 # ---------------------------------------------------------------------------
 loss:
   cfa_gdro:
@@ -32,5 +36,6 @@ loss:
     weight: 0.5          # lambda_rob
   evidential:
     anneal_epochs: 10    # docs/math/evidential_prototype_head.md Section 7
+    weight: 1.0          # lambda_evi
   cp_graph:
     weight: 0.1          # lambda_graph (docs/math/cp_graph.md Section 7)

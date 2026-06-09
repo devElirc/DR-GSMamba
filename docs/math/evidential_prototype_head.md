@@ -140,19 +140,27 @@ Early epochs let the model build evidence freely; later epochs progressively pen
 
 ## 5. Compatibility with CFA-GDRO
 
-CFA-GDRO consumes a per-sample loss $\ell_\theta(x_i, y_i)$. The evidential head provides such a per-sample loss out of the box: $\ell^{\mathrm{EPH}}_i = \mathcal{L}_{\mathrm{EPH}}^{(t)}(f_i, y_i)$. So CFA-GDRO can be applied directly on top of the evidential per-sample losses, *replacing* the cross-entropy losses in the formulae of `cfa_gdro.md`. In the final training objective we use the EPH per-sample loss as the input to CFA-GDRO, and the mean EPH loss as the cross-entropy substitute:
+CFA-GDRO consumes a per-sample loss $\ell_\theta(x_i, y_i)$. We use the **standard cross-entropy** $\ell^{\mathrm{CE}}_i = -\log p_\theta(y_i \mid x_i)$ as that per-sample loss, where $p_\theta$ is the softmax of the EPH logits $\tau\,\cos(f, m_k)$. This choice is locked by decision D-08 in `roadmap.md` and validated by the Phase 2E smoke debug:
+
+- the EPH Bayes-risk has a vanishing gradient at the uniform-prediction saddle (gradient on $\alpha$ at uniform is $O(1/K)$ compared with $O(1)$ for CE), so $\mathcal{L}_{\mathrm{EPH}}$ alone gets stuck and the model never escapes uniform predictions;
+- using $\ell^{\mathrm{CE}}_i$ as the CFA-GDRO input lets the *same* model (same prototypes, same temperature) be re-weighted for rare-class robustness without the saddle-point pathology;
+- the EPH calibration claim is still consistent end-to-end because the CE logits are derived from the EPH cos×$\tau$ pathway -- argmax of CE softmax equals argmax of EPH predictive probabilities $p_k$ when both share the temperature.
+
+In the final training objective we therefore follow Eq. (4) of `cfa_gdro.md` §3 *verbatim*:
 
 $$
 \mathcal{L}_{\mathrm{total}}(\theta)
 \;=\;
-\underbrace{\overline{\ell^{\mathrm{EPH}}}}_{\text{mean EPH}}
+\underbrace{\overline{\ell^{\mathrm{CE}}}}_{\text{mean CE}}
 \;+\;
-\lambda_{\mathrm{rob}}\,\mathcal{L}_{\mathrm{CFA\text{-}GDRO}}^{\mathrm{EPH}}(\theta)
+\lambda_{\mathrm{rob}}\,\mathcal{L}_{\mathrm{CFA\text{-}GDRO}}^{\mathrm{CE}}(\theta)
+\;+\;
+\lambda_{\mathrm{evi}}\,\mathcal{L}_{\mathrm{EPH}}(\theta)
 \;+\;
 \lambda_{\mathrm{graph}}\,\mathcal{L}_{\mathrm{CP\text{-}graph}}(\theta).
 $$
 
-This is what makes the title word *Reliable* end-to-end consistent: the same loss function is calibrated by the evidential head and reweighted by CFA-GDRO, so both contributions act on the same quantity.
+The EPH loss $\mathcal{L}_{\mathrm{EPH}}$ here is the **mean per-sample EPH** (Eq. (14)); it acts as an explicit calibration regulariser with weight $\lambda_{\mathrm{evi}}$ (default $1.0$). The "Reliable" claim is preserved by the chain *CE input $\rightarrow$ CFA-GDRO water-filling $\rightarrow$ rare-class upper bound* (`cfa_gdro.md` §5), and the "Calibrated" claim is preserved by the additive $\mathcal{L}_{\mathrm{EPH}}$ term, which pushes wrong-class evidence toward the uniform Dirichlet prior.
 
 ---
 

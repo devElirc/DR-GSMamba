@@ -7,7 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Nothing yet. Phase 2B (data module) is the next milestone — see `roadmap.md` §3.
+### Added
+
+- **Phase 2B — Data module.**
+  - `src/hsi_robust/data/io.py`: `.mat` / `.npy` cube + ground-truth loader with shape and label-range sanity checks against the dataset config.
+  - `src/hsi_robust/data/scene_freq.py`: `flatten_labeled_pixels` (auto-remap 1-indexed scene gt to 0-indexed) and `compute_scene_freq` (scene-level π_k, the source-of-truth quantity for CFA-GDRO per `docs/math/cfa_gdro.md` §1).
+  - `src/hsi_robust/data/sampler.py`: `stratified_fixed_per_class_split` with `np.random.default_rng(seed)` for bit-deterministic train/test draws; emits a `UserWarning` when a class is starved (e.g., class 9 of Indian Pines at `samples_per_class=20`).
+  - `src/hsi_robust/data/transforms.py`: `PerBandStandardize`, `PCAReducer` (full SVD solver, fixed random_state), and reflection-padded patch helpers.
+  - `src/hsi_robust/data/hsi_dataset.py`: `HSIDataset` returning `(raw_spectrum, pca_patch, label)` tuples, plus `SplitArtifacts` dataclass and `build_split` / `build_split_from_arrays` orchestrators.
+  - `src/hsi_robust/utils/config.py`: `load_yaml` helper (no Hydra runtime dependency).
+  - `tests/test_data.py`: 18 unit tests covering scene-freq summation, sampler determinism and starvation handling, leak-free fit of standardiser + PCA, dataset shapes / dtypes, and an Indian Pines end-to-end determinism test guarded by data availability.
+  - `scripts/_phase2b_exit_check.py`: minimal demo proving the M2B exit criterion (5-line mini-batch from Indian Pines + identical-on-second-invocation).
+
+Phase 2C (model module) is the next milestone — see `roadmap.md` §3.
 
 ---
 

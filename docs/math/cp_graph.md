@@ -73,19 +73,21 @@ $$
 
 CP-Graph operates on the EPH predictive probabilities $p_i = \alpha_i / S_i$ from `method.tex` Eq. (10) and Eq. (11). It does *not* operate on the raw evidence vector $e_i$ — using $p_i$ keeps the regulariser on the same calibrated quantity that CFA-GDRO eventually re-weights.
 
-Because $\mathcal{L}_{\mathrm{CP\text{-}graph}}$ is an *unweighted batch mean*, not a per-class average, it is **not** passed through the CFA-GDRO water-filling solver. It enters the total loss additively with weight $\lambda_{\mathrm{graph}}$, exactly as written in `method.tex` Eq. (16):
+Because $\mathcal{L}_{\mathrm{CP\text{-}graph}}$ is an *unweighted batch mean*, not a per-class average, it is **not** passed through the CFA-GDRO water-filling solver. It enters the total loss additively with weight $\lambda_{\mathrm{graph}}$, exactly as written in Eq. (4) of `cfa_gdro.md` §3:
 
 $$
 \mathcal{L}_{\mathrm{total}}(\theta)
 \;=\;
-\overline{\ell^{\mathrm{EPH}}}(\theta)
+\overline{\ell^{\mathrm{CE}}}(\theta)
 \;+\;
-\lambda_{\mathrm{rob}}\,\mathcal{L}_{\mathrm{CFA\text{-}GDRO}}^{\mathrm{EPH}}(\theta)
+\lambda_{\mathrm{rob}}\,\mathcal{L}_{\mathrm{CFA\text{-}GDRO}}^{\mathrm{CE}}(\theta)
+\;+\;
+\lambda_{\mathrm{evi}}\,\mathcal{L}_{\mathrm{EPH}}(\theta)
 \;+\;
 \lambda_{\mathrm{graph}}\,\mathcal{L}_{\mathrm{CP\text{-}graph}}(\theta).
 $$
 
-This separation is deliberate: the robust class-reweighting handled by CFA-GDRO and the per-pixel smoothing handled by CP-Graph operate on different statistical levels (class vs. pixel) and should not interact through the inner LP solver.
+This separation is deliberate: the robust class-reweighting handled by CFA-GDRO and the per-pixel smoothing handled by CP-Graph operate on different statistical levels (class vs. pixel) and should not interact through the inner LP solver. CP-Graph still operates on the EPH predictive probabilities $p_i$, not on the CE softmax, because the EPH probabilities are what feature in the calibration analysis (vacuity / aleatoric maps).
 
 ---
 

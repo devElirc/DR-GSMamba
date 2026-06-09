@@ -248,18 +248,20 @@ We use $T_{\mathrm{anneal}} = 10$ epochs throughout the paper.
 \subsection{Unified training objective}
 \label{sec:method:total-loss}
 
-CFA-GDRO and EPH share a single per-sample loss $\ell^{\mathrm{EPH}}_i = \mathcal{L}_{\mathrm{EPH}}^{(t)}(f_i, y_i)$, which is fed into the sorted water-filling solver as the input to Eq.~\eqref{eq:method:cfa-gdro}. The total training objective is
+CFA-GDRO consumes the per-sample cross-entropy $\ell^{\mathrm{CE}}_i = -\log p_\theta(y_i \mid x_i)$ where $p_\theta$ is the softmax of the EPH logits $\tau\,\tilde{f}_i^\top \tilde{m}_k$ (so the CE and EPH pathways share the same prototypes and temperature). The total training objective is
 \begin{equation}
   \mathcal{L}_{\mathrm{total}}(\theta)
   \;=\;
-  \overline{\ell^{\mathrm{EPH}}}(\theta)
+  \overline{\ell^{\mathrm{CE}}}(\theta)
   \;+\;
-  \lambda_{\mathrm{rob}}\;\mathcal{L}_{\mathrm{CFA\text{-}GDRO}}^{\mathrm{EPH}}(\theta)
+  \lambda_{\mathrm{rob}}\;\mathcal{L}_{\mathrm{CFA\text{-}GDRO}}^{\mathrm{CE}}(\theta)
+  \;+\;
+  \lambda_{\mathrm{evi}}\;\overline{\mathcal{L}_{\mathrm{EPH}}}(\theta)
   \;+\;
   \lambda_{\mathrm{graph}}\;\mathcal{L}_{\mathrm{CP\text{-}graph}}(\theta),
   \label{eq:method:total-loss}
 \end{equation}
-where $\overline{\ell^{\mathrm{EPH}}}$ is the mean evidential loss over the mini-batch and $\mathcal{L}_{\mathrm{CP\text{-}graph}}$ is the in-batch cross-pixel consistency loss defined in Eq.~\eqref{eq:method:cp-graph} below. The mean term keeps optimisation well-behaved when $\mathcal{L}_{\mathrm{CFA\text{-}GDRO}}^{\mathrm{EPH}}$ is sharp (small $\alpha$). Default weights are $\lambda_{\mathrm{rob}} = 0.5$, $\lambda_{\mathrm{graph}} = 0.1$, both tuned on validation only.
+where $\overline{\ell^{\mathrm{CE}}}$ is the mean CE over the mini-batch, $\overline{\mathcal{L}_{\mathrm{EPH}}}$ is the mean evidential loss of Eq.~\eqref{eq:method:eph-total}, and $\mathcal{L}_{\mathrm{CP\text{-}graph}}$ is the in-batch cross-pixel consistency loss defined in Eq.~\eqref{eq:method:cp-graph} below. The mean-CE anchor is required for stable optimisation: empirically the EPH Bayes-risk alone has a vanishing gradient at the uniform-prediction saddle (its gradient on $\boldsymbol{\alpha}$ is $O(1/K)$ versus $O(1)$ for CE) and is unable to escape on its own. Default weights are $\lambda_{\mathrm{rob}} = 0.5$, $\lambda_{\mathrm{evi}} = 1.0$, $\lambda_{\mathrm{graph}} = 0.1$, all tuned on validation only.
 
 \paragraph{Cross-pixel consistency loss.}
 Within each mini-batch of $N$ pixels, let $\mathcal{N}_k(i)$ index the $k$ nearest neighbours of pixel $i$ in fused-feature space by cosine similarity, with softmax weights $w_{ij} = \exp(\tilde{f}_i^\top \tilde{f}_j / \tau_g) / \sum_{j'\in\mathcal{N}_k(i)} \exp(\tilde{f}_i^\top \tilde{f}_{j'} / \tau_g)$. Define the neighbour-averaged prediction $\tilde{p}_i = \sum_{j\in\mathcal{N}_k(i)} w_{ij}\,p_j$. The consistency loss uses a one-directional KL with a stop-gradient target,

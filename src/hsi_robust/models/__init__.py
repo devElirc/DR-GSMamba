@@ -1,18 +1,32 @@
-"""Backbone and head modules.
+"""Backbone and head modules (Phase 2C).
 
-Public surface (to be populated in Phase 2C):
+Public surface:
 
-* ``OPS4SpectralEncoder``      - bidirectional selective scan on raw spectral bands.
-* ``SpatialCNNStem``           - compact 2D-CNN on PCA-reduced patches.
-* ``CPGraphPropagation``       - in-batch k-NN graph reasoning (design choice).
-* ``EvidentialPrototypeHead``  - the Dirichlet-evidential head specified in
-  ``docs/math/evidential_prototype_head.md`` Section 8.
-* ``DRGSMamba``                - full model assembling the above.
-
-None of these are exposed yet; the math contracts they will obey live in
-``docs/math/``.
+* :class:`OPS4Block`, :class:`OPS4Encoder`  -- bidirectional spectral SSM.
+* :class:`SpatialCNNStem`                   -- compact 2D-CNN on PCA patches.
+* :func:`build_cp_graph`, :class:`CPGraphRefinement`
+                                              -- in-batch k-NN graph reasoning.
+* :class:`FusionMLP`                        -- concat + MLP fusion.
+* :class:`EvidentialPrototypeHead`          -- Dirichlet-evidential head.
+* :class:`DRGSMamba`                        -- assembled full model.
 """
 
 from __future__ import annotations
 
-__all__: list[str] = []
+from hsi_robust.models.cp_graph import CPGraphRefinement, build_cp_graph
+from hsi_robust.models.dr_gsmamba import DRGSMamba
+from hsi_robust.models.evidential_head import EvidentialPrototypeHead
+from hsi_robust.models.fusion import FusionMLP
+from hsi_robust.models.op_s4 import OPS4Block, OPS4Encoder
+from hsi_robust.models.spatial_stem import SpatialCNNStem
+
+__all__ = [
+    "CPGraphRefinement",
+    "DRGSMamba",
+    "EvidentialPrototypeHead",
+    "FusionMLP",
+    "OPS4Block",
+    "OPS4Encoder",
+    "SpatialCNNStem",
+    "build_cp_graph",
+]

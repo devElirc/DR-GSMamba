@@ -5,7 +5,7 @@
 
 This repository is being rebuilt from scratch around a single core contribution: a class-frequency-aware group-distributionally-robust objective (CFA-GDRO) for label-scarce hyperspectral image classification, complemented by an evidential prototype head for calibrated uncertainty.
 
-**Phase 1 (Math + Method Design) is complete.** The next milestone is Phase 2 (build the framework from scratch). The detailed plan from Phase 0 through submission lives in `roadmap.md`; the experimental design lives in `EXPERIMENT_PLAN.md`.
+**Phase 1 (Math + Method Design), Phase 2A (Scaffolding), and Phase 2B (Data module) are complete.** The next milestone is Phase 2C (model module). The detailed plan from Phase 0 through submission lives in `roadmap.md`; the experimental design lives in `EXPERIMENT_PLAN.md`.
 
 ## What is in the repository right now
 
@@ -25,7 +25,7 @@ This repository is being rebuilt from scratch around a single core contribution:
 | --- | --- | --- |
 | 0 | Story lock (Option 1, title locked) | Done |
 | 1 | Math and method design | Done |
-| 2 | Build the framework from scratch | Pending |
+| 2 | Build the framework from scratch | In progress (2A and 2B done; 2C next) |
 | 3 | Baselines (faithful re-implementations / official wrappers) | Pending |
 | 4 | Datasets (Houston 2013 or WHU-Hi-LongKou) | Pending |
 | 5 | Pre-benchmark sanity (unit tests, first ablation) | Pending |
@@ -34,4 +34,4 @@ This repository is being rebuilt from scratch around a single core contribution:
 | 8 | Paper writing | Pending |
 | 9 | Polish and submission to Pattern Recognition | Pending |
 
-A reproducible code package will appear here at the end of Phase 2.
+A reproducible code package skeleton with the full data pipeline is now present. The training-ready package will appear at the end of Phase 2.

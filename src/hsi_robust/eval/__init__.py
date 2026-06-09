@@ -1,14 +1,48 @@
-"""Evaluation, calibration, and qualitative-map utilities.
+"""Evaluation utilities (Phase 2E).
 
-Public surface (to be populated in Phase 2E and Phase 7):
+Public surface:
 
-* ``compute_metrics``         - OA, AA, kappa, macro-F1, per-class, worst-class,
-  rare-class, CoV, worst-split.
-* ``compute_ece``             - 15-bin expected calibration error.
-* ``reliability_diagram``     - matplotlib figure for the appendix.
-* ``classification_maps``     - prediction / error / vacuity / aleatoric maps.
+* :func:`compute_metrics`, :func:`per_class_accuracy`, :func:`overall_accuracy`,
+  :func:`average_accuracy`, :func:`kappa_score`, :func:`worst_class_accuracy`,
+  :func:`coefficient_of_variation`, :func:`rare_class_accuracy` -- core metrics.
+* :func:`expected_calibration_error`, :class:`ReliabilityBins` -- calibration.
+* :func:`classification_map`, :func:`error_map`, :func:`vacuity_map`,
+  :func:`aleatoric_map` -- qualitative maps.
 """
 
 from __future__ import annotations
 
-__all__: list[str] = []
+from hsi_robust.eval.calibration import ReliabilityBins, expected_calibration_error
+from hsi_robust.eval.metrics import (
+    average_accuracy,
+    coefficient_of_variation,
+    compute_metrics,
+    kappa_score,
+    overall_accuracy,
+    per_class_accuracy,
+    rare_class_accuracy,
+    worst_class_accuracy,
+)
+from hsi_robust.eval.qualitative import (
+    aleatoric_map,
+    classification_map,
+    error_map,
+    vacuity_map,
+)
+
+__all__ = [
+    "ReliabilityBins",
+    "aleatoric_map",
+    "average_accuracy",
+    "classification_map",
+    "coefficient_of_variation",
+    "compute_metrics",
+    "error_map",
+    "expected_calibration_error",
+    "kappa_score",
+    "overall_accuracy",
+    "per_class_accuracy",
+    "rare_class_accuracy",
+    "vacuity_map",
+    "worst_class_accuracy",
+]

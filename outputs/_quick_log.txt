@@ -1,0 +1,7 @@
+﻿[data] indian_pines: train=80 test=10169 K=16 B=200 P=9 PCA=30
+[model] params=134,666 (0.135 M)
+[run]  output_dir=F:\Python\HSI\DR-GSMamba\outputs\_quick
+[epoch 000] lr=3.00e-04 train_loss=1.6939 OA=0.0451
+[epoch 001] lr=5.00e-04 train_loss=1.5237 OA=0.0720
+[epoch 002] lr=7.00e-04 train_loss=1.7656 OA=0.0222
+[epoch 003] lr=9.00e-04 train_loss=1.7449 OA=0.0016
