@@ -39,9 +39,7 @@ def _per_class_means(
     return sums / safe, counts
 
 
-def _water_filling(
-    losses: torch.Tensor, caps: torch.Tensor
-) -> tuple[torch.Tensor, float, int]:
+def _water_filling(losses: torch.Tensor, caps: torch.Tensor) -> tuple[torch.Tensor, float, int]:
     """Closed-form solver of ``max_q <q, losses>  s.t. 0 <= q <= caps, sum q = 1``.
 
     Inputs must be 1-D and live on the same device. Returns ``(q_star, nu, n_active)``

@@ -1,8 +1,17 @@
-# Top-level defaults. Resolved by hsi_robust.utils.load_config (Phase 2B).
-# Each entry under `defaults` is a path relative to configs/.
-# Override by composing on the command line, e.g.:
-#   python scripts/train.py --config configs/defaults.yaml \
-#                           --override dataset=pavia_university training=label_5
+# Top-level defaults. Only the keys read by scripts/train.py live here:
+#
+#   defaults.dataset / defaults.model / defaults.training  -- route to the
+#       configs/<group>/<name>.yaml file that holds the actual settings.
+#   seed                                                   -- default seed
+#                                                             (CLI --seed wins)
+#   deterministic                                          -- enable
+#       torch.use_deterministic_algorithms(True, warn_only=True)
+#
+# All other knobs (epochs, batch_size, log_every, val_every, save_every, ...)
+# live in configs/training/<name>.yaml because they are training-time concerns.
+#
+# Example override:
+#   python scripts/train.py --dataset pavia_university --training label_5
 
 defaults:
   dataset: indian_pines
@@ -10,8 +19,4 @@ defaults:
   training: default
 
 seed: 0
-output_dir: outputs
-deterministic: true   # torch.use_deterministic_algorithms(True, warn_only=True)
-log_every: 50
-val_every: 1
-save_every: 50
+deterministic: true

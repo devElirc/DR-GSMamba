@@ -116,9 +116,7 @@ def test_compute_scene_freq_raises_on_empty_class() -> None:
 
 
 def test_sampler_returns_exactly_k_per_class() -> None:
-    labels = np.concatenate(
-        [np.full(100, k, dtype=np.int64) for k in range(4)]
-    )  # 100 per class
+    labels = np.concatenate([np.full(100, k, dtype=np.int64) for k in range(4)])  # 100 per class
     train_idx, test_idx = stratified_fixed_per_class_split(
         labels, samples_per_class=5, seed=0, num_classes=4
     )
@@ -132,24 +130,16 @@ def test_sampler_returns_exactly_k_per_class() -> None:
 
 def test_sampler_is_deterministic_with_same_seed() -> None:
     labels = np.concatenate([np.full(50, k) for k in range(3)])
-    t1, e1 = stratified_fixed_per_class_split(
-        labels, samples_per_class=5, seed=0, num_classes=3
-    )
-    t2, e2 = stratified_fixed_per_class_split(
-        labels, samples_per_class=5, seed=0, num_classes=3
-    )
+    t1, e1 = stratified_fixed_per_class_split(labels, samples_per_class=5, seed=0, num_classes=3)
+    t2, e2 = stratified_fixed_per_class_split(labels, samples_per_class=5, seed=0, num_classes=3)
     np.testing.assert_array_equal(t1, t2)
     np.testing.assert_array_equal(e1, e2)
 
 
 def test_sampler_different_seed_produces_different_draw() -> None:
     labels = np.concatenate([np.full(50, k) for k in range(3)])
-    t1, _ = stratified_fixed_per_class_split(
-        labels, samples_per_class=5, seed=0, num_classes=3
-    )
-    t2, _ = stratified_fixed_per_class_split(
-        labels, samples_per_class=5, seed=1, num_classes=3
-    )
+    t1, _ = stratified_fixed_per_class_split(labels, samples_per_class=5, seed=0, num_classes=3)
+    t2, _ = stratified_fixed_per_class_split(labels, samples_per_class=5, seed=1, num_classes=3)
     # Per-class counts must still match.
     assert np.bincount(labels[t1], minlength=3).tolist() == [5, 5, 5]
     assert np.bincount(labels[t2], minlength=3).tolist() == [5, 5, 5]
@@ -160,9 +150,7 @@ def test_sampler_different_seed_produces_different_draw() -> None:
 def test_sampler_warns_when_class_is_starved() -> None:
     # Class 2 has only 3 pixels; with samples_per_class=5, the class is starved
     # and the sampler must warn and emit zero test indices for that class.
-    labels = np.concatenate(
-        [np.full(20, 0), np.full(20, 1), np.full(3, 2)]
-    ).astype(np.int64)
+    labels = np.concatenate([np.full(20, 0), np.full(20, 1), np.full(3, 2)]).astype(np.int64)
     with pytest.warns(UserWarning, match="cannot be evaluated"):
         train_idx, test_idx = stratified_fixed_per_class_split(
             labels, samples_per_class=5, seed=0, num_classes=3
@@ -266,9 +254,7 @@ def test_build_split_pca_leak_freeness() -> None:
     )
     # Standardiser fit on TRAIN spectra (raw).
     assert artifacts.standardizer.mean_ is not None
-    train_spectra_raw = cube[
-        artifacts.train_positions[:, 0], artifacts.train_positions[:, 1], :
-    ]
+    train_spectra_raw = cube[artifacts.train_positions[:, 0], artifacts.train_positions[:, 1], :]
     np.testing.assert_allclose(
         artifacts.standardizer.mean_, train_spectra_raw.mean(axis=0), atol=1e-4
     )
@@ -277,9 +263,7 @@ def test_build_split_pca_leak_freeness() -> None:
     train_spectra_std = cube_std[
         artifacts.train_positions[:, 0], artifacts.train_positions[:, 1], :
     ]
-    np.testing.assert_allclose(
-        artifacts.pca.mean_, train_spectra_std.mean(axis=0), atol=1e-4
-    )
+    np.testing.assert_allclose(artifacts.pca.mean_, train_spectra_std.mean(axis=0), atol=1e-4)
 
 
 def test_build_split_scene_freq_matches_full_gt() -> None:

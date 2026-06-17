@@ -184,6 +184,7 @@ def main(argv: list[str] | None = None) -> int:
         output_dir=output_dir,
         device=device,
         on_log=_log,
+        seed=args.seed,
     )
     state = trainer.fit()
 

@@ -52,15 +52,26 @@ class OPS4Block(nn.Module):
     the positive exponential parameterisation, guaranteeing stability.
     """
 
-    def __init__(self, d_model: int, d_state: int, *, dropout: float = 0.1) -> None:
+    def __init__(
+        self,
+        d_model: int,
+        d_state: int,
+        *,
+        dropout: float = 0.1,
+        use_hippo_init: bool = True,
+    ) -> None:
         super().__init__()
         if d_model <= 0 or d_state <= 0:
             raise ValueError("d_model and d_state must be positive")
         self.d_model = int(d_model)
         self.d_state = int(d_state)
+        self.use_hippo_init = bool(use_hippo_init)
 
-        # HiPPO-LegS-inspired init: per-channel log dt + per-(channel, state) log A.
-        self.log_dt = nn.Parameter(_hippo_legs_log_dt(d_model))
+        # HiPPO-LegS-inspired init (default) vs. a flat constant log dt.
+        if self.use_hippo_init:
+            self.log_dt = nn.Parameter(_hippo_legs_log_dt(d_model))
+        else:
+            self.log_dt = nn.Parameter(torch.full((d_model,), math.log(1e-2)))
         log_A = math.log(0.5) + 0.1 * torch.randn(d_model, d_state)
         self.log_A = nn.Parameter(log_A)
         self.B = nn.Parameter(torch.randn(d_model, d_state) / math.sqrt(d_state))
@@ -141,6 +152,8 @@ class OPS4Encoder(nn.Module):
         out_dim: int = 64,
         bidirectional: bool = True,
         dropout: float = 0.1,
+        use_hippo_init: bool = True,
+        use_band_gate: bool = True,
     ) -> None:
         super().__init__()
         if num_bands <= 0:
@@ -149,22 +162,42 @@ class OPS4Encoder(nn.Module):
         self.d_model = int(d_model)
         self.bidirectional = bool(bidirectional)
         self.out_dim = int(out_dim)
+        self.use_hippo_init = bool(use_hippo_init)
+        self.use_band_gate = bool(use_band_gate)
 
-        # Per-band importance gate (the "selective" part).
-        self.band_gate = nn.Parameter(torch.zeros(num_bands))
+        # Per-band importance gate (the "selective" part). When disabled the
+        # forward path skips the multiplication entirely so the gate parameter
+        # cannot drift in the wrong direction during ablation runs.
+        if self.use_band_gate:
+            self.band_gate = nn.Parameter(torch.zeros(num_bands))
+        else:
+            self.register_parameter("band_gate", None)
 
         # Input projection: scalar per band -> d_model channels.
         self.in_proj = nn.Linear(1, d_model)
 
         # Forward stack.
         self.fwd_blocks = nn.ModuleList(
-            [OPS4Block(d_model=d_model, d_state=d_state, dropout=dropout) for _ in range(num_layers)]
+            [
+                OPS4Block(
+                    d_model=d_model,
+                    d_state=d_state,
+                    dropout=dropout,
+                    use_hippo_init=self.use_hippo_init,
+                )
+                for _ in range(num_layers)
+            ]
         )
         # Reverse stack (separate parameters so each direction can specialise).
         self.bwd_blocks = (
             nn.ModuleList(
                 [
-                    OPS4Block(d_model=d_model, d_state=d_state, dropout=dropout)
+                    OPS4Block(
+                        d_model=d_model,
+                        d_state=d_state,
+                        dropout=dropout,
+                        use_hippo_init=self.use_hippo_init,
+                    )
                     for _ in range(num_layers)
                 ]
             )
@@ -188,11 +221,12 @@ class OPS4Encoder(nn.Module):
         ``(N, out_dim)`` per-pixel spectral feature.
         """
         if spectrum.ndim != 2 or spectrum.shape[-1] != self.num_bands:
-            raise ValueError(
-                f"expected (N, {self.num_bands}); got {tuple(spectrum.shape)}"
-            )
-        gate = torch.sigmoid(self.band_gate)  # (num_bands,)
-        x = spectrum * gate  # (N, num_bands)
+            raise ValueError(f"expected (N, {self.num_bands}); got {tuple(spectrum.shape)}")
+        if self.use_band_gate:
+            gate = torch.sigmoid(self.band_gate)  # (num_bands,)
+            x = spectrum * gate  # (N, num_bands)
+        else:
+            x = spectrum
         x = x.unsqueeze(-1)  # (N, num_bands, 1)
         x = self.in_proj(x)  # (N, num_bands, d_model)
 

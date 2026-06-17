@@ -61,9 +61,7 @@ class EvidentialPrototypeHead(nn.Module):
         self.tau_max = float(tau_max)
 
         # Learnable prototypes m_k in R^d.
-        self.prototypes = nn.Parameter(
-            prototype_init_scale * torch.randn(num_classes, feature_dim)
-        )
+        self.prototypes = nn.Parameter(prototype_init_scale * torch.randn(num_classes, feature_dim))
         # Parameterise tau through softplus on a raw scalar so it stays positive.
         # Use the inverse softplus of tau_init to get the right starting point.
         raw = float(torch.log(torch.expm1(torch.tensor(float(tau_init)))).item())
@@ -105,7 +103,7 @@ class EvidentialPrototypeHead(nn.Module):
         alpha = evidence + 1.0  # (N, K), >= 1
         s = alpha.sum(dim=1, keepdim=True)  # (N, 1)
         probs = alpha / s  # (N, K)
-        vacuity = (float(self.num_classes) / s.squeeze(-1))  # (N,), in (0, 1]
+        vacuity = float(self.num_classes) / s.squeeze(-1)  # (N,), in (0, 1]
         aleatoric = (probs * (1.0 - probs)).sum(dim=1)  # (N,)
 
         return {

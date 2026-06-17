@@ -72,9 +72,7 @@ class FusionMLP(nn.Module):
                 f"spectral must be (N, {self.spectral_dim}); got {tuple(spectral.shape)}"
             )
         if spatial.ndim != 2 or spatial.shape[-1] != self.spatial_dim:
-            raise ValueError(
-                f"spatial must be (N, {self.spatial_dim}); got {tuple(spatial.shape)}"
-            )
+            raise ValueError(f"spatial must be (N, {self.spatial_dim}); got {tuple(spatial.shape)}")
         if spectral.shape[0] != spatial.shape[0]:
             raise ValueError(
                 f"batch dimension mismatch: spectral {spectral.shape[0]} vs spatial {spatial.shape[0]}"

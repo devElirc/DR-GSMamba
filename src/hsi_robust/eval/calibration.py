@@ -50,9 +50,7 @@ def expected_calibration_error(
     if probs.ndim != 2:
         raise ValueError(f"probs must be 2-D; got {probs.shape}")
     if y_true.shape != probs.shape[:1]:
-        raise ValueError(
-            f"y_true shape {y_true.shape} incompatible with probs {probs.shape}"
-        )
+        raise ValueError(f"y_true shape {y_true.shape} incompatible with probs {probs.shape}")
     if num_bins <= 1:
         raise ValueError("num_bins must be >= 2")
     n = probs.shape[0]

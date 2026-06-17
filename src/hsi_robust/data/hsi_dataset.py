@@ -167,9 +167,7 @@ def build_split_from_arrays(
     if patch_size <= 0 or patch_size % 2 == 0:
         raise ValueError(f"patch_size must be positive and odd; got {patch_size}")
     if pca_components <= 0 or pca_components > cube.shape[2]:
-        raise ValueError(
-            f"pca_components must be in (0, {cube.shape[2]}]; got {pca_components}"
-        )
+        raise ValueError(f"pca_components must be in (0, {cube.shape[2]}]; got {pca_components}")
 
     labels_flat, positions = flatten_labeled_pixels(
         gt, num_classes=num_classes, ignore_label=ignore_label

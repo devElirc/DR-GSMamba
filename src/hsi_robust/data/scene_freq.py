@@ -62,9 +62,7 @@ def flatten_labeled_pixels(
 
     unique = np.unique(labels)
     if unique.size == 0:
-        raise ValueError(
-            f"no labelled pixels found (every pixel has gt == {ignore_label})"
-        )
+        raise ValueError(f"no labelled pixels found (every pixel has gt == {ignore_label})")
     if unique.min() >= 1 and unique.max() <= num_classes:
         # 1-indexed scene convention; remap to 0-indexed.
         labels = labels - 1
@@ -119,9 +117,7 @@ def compute_scene_freq(
         raise ValueError("labels_flat is empty")
     lo, hi = int(labels_np.min()), int(labels_np.max())
     if lo < 0 or hi >= num_classes:
-        raise ValueError(
-            f"labels out of range [0, {num_classes - 1}]: min={lo}, max={hi}"
-        )
+        raise ValueError(f"labels out of range [0, {num_classes - 1}]: min={lo}, max={hi}")
 
     counts = np.bincount(labels_np, minlength=num_classes).astype(np.float64)
     empty_classes = np.where(counts == 0)[0]

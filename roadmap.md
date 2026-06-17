@@ -9,7 +9,7 @@
 | Project start (Week 1) | 2026-05-19 |
 | Submission target | end of August 2026 (Week 13) |
 | Graduation buffer | until July 2027 (≈11 months after submission) |
-| Status snapshot | **Phase 0 done · Phase 1 done · Phase 2 done (2A/2B/2C/2D/2E) · Phase 3 next** |
+| Status snapshot | **Phase 0 done · Phase 1 done · Phase 2 done (2A–2E + D-11 polish) · Phase 3 implementation done (M3.1–M3.6); paper-vs-ours reproduction-gap fill deferred to Phase 5 M5.2 · Phase 4 next** |
 
 > This document is the project plan. The mathematical contract is `docs/math/*.md`, the experimental design is `EXPERIMENT_PLAN.md`, and the literature monitoring lives in `LITERATURE_TRACKING.md`. The roadmap coordinates these three.
 
@@ -82,7 +82,7 @@ Phase 9 polish + submission
 
 **Single longest serial chain:** Phase 2A → 2B → 2C → 2D → 2E → 5 → 6 → 8 → 9.
 **Earliest parallel point:** weeks 5–6 (baselines and datasets in parallel).
-**Latest GO/NO-GO decision:** end of Phase 5 (week 6). If sanity OA < 80 % on Indian Pines we do *not* start Phase 6 until the issue is found.
+**Latest GO/NO-GO decision:** end of Phase 5 (week 6). Per decision **D-10** the gate is the three-criterion bundle (AA ≥ 75 % and rare-class ≥ 85 % on Indian Pines 5-spc averaged over 3 seeds, plus determinism); raw OA is no longer a stop-shipping number because CFA-GDRO is designed to trade OA for AA and rare-class accuracy.
 
 ---
 
@@ -118,7 +118,7 @@ The phase table at the bottom of `README.md` is the index. Each entry below has 
 | Exit criteria | All six M-items written; cross-file consistency check passed (re-checked on 2026-05-22 after the scene-frequency refinement and the CP-Graph lock) |
 | Dependencies | Phase 0 |
 
-### Phase 2 — Build the framework from scratch  ⏳ Next
+### Phase 2 — Build the framework from scratch  ✅ Done
 
 > Phase 2 is sub-divided to make week-3 and week-4 risk-tracking realistic.
 
@@ -212,20 +212,22 @@ The phase table at the bottom of `README.md` is the index. Each entry below has 
 
 **Completion note (2026-06-05).** All M2E.1–M2E.8 deliverables created. `outputs/smoke_v1` recorded **OA = 62.97 %, AA = 78.37 %, $\kappa$ = 0.591, rare-class = 99.39 %, worst-class = 26.91 %, ECE-15 = 0.473**; `outputs/smoke_v2` (same seed, same code) produced bit-exact matching metrics. Decisions D-08, D-09 and D-10 were logged during this phase. Test count after Phase 2E: 43 passing (Phase 2A 8 + Phase 2B 18 + Phase 2C 6 + Phase 2D 8 + Phase 2E 3). Coverage of `losses/` stays ≥ 90 %.
 
-### Phase 3 — Baselines (week 5, in parallel with Phase 4)
+### Phase 3 — Baselines (week 5, in parallel with Phase 4)  ✅ Implementation done
 
 | Field | Value |
 | --- | --- |
 | Objective | Make every baseline runnable under the *same* protocol so head-to-head numbers are fair. |
-| M3.1 | Shallow baselines (`baselines/{svm, rf, knn}.py`) |
-| M3.2 | 3D-CNN + HybridSN re-implementation against the original paper |
-| M3.3 | SpectralFormer + SSFTT wrappers around official code if licence permits, otherwise faithful re-implementations |
-| M3.4 | Nonlocal-GCN re-implementation for single-scene training |
-| M3.5 | MambaHSI wrapper around the official repo |
-| M3.6 | `scripts/run_baselines.py` runs every baseline on Indian Pines + Pavia U with one seed; reproduces each paper's reported OA within ± 2 % |
-| Deliverables | Baseline reproduction table (private, sanity only) |
-| Exit criteria | Every baseline either matches its paper within ± 2 % OA or its reproduction gap is recorded for the manuscript footnote |
+| M3.1 | Shallow baselines (`baselines/shallow.py` — SVM, RF, kNN sharing one wrapper) ✅ |
+| M3.2 | 3D-CNN + HybridSN re-implementation (`baselines/cnn3d.py`, `baselines/hybridsn.py`) ✅ |
+| M3.3 | SpectralFormer + SSFTT (faithful in-house re-implementations to keep the Phase-9 anonymised submission self-contained) ✅ |
+| M3.4 | Nonlocal-GCN re-implementation for single-scene training ✅ |
+| M3.5 | MambaHSI (faithful re-implementation re-using the in-house OP-S4 selective-scan block — see `docs/baselines.md`) ✅ |
+| M3.6 | `scripts/run_baselines.py` runs every baseline on any dataset / seed / spc combination; one-line summary per baseline + JSON per-run + global summary file ✅ |
+| Deliverables | Baseline reproduction table (Phase 5 fills the real-data numbers — `docs/baselines.md` carries the schema) |
+| Exit criteria | Every baseline either matches its paper within ± 2 % OA or its reproduction gap is recorded for the manuscript footnote — verification deferred to Phase 5 M5.2 because it requires the full-epoch GPU runs. Phase 3 implementation gate (all baselines runnable end-to-end with the same data path + identical metric harness) is **met**. |
 | Dependencies | 2E |
+
+**Completion note (2026-06-17).** All nine baselines runnable through `scripts/run_baselines.py`. Smoke-validated on real Indian Pines, 5 samples/class, seed 0: shallow trio prints sensible OA in ~20 s on CPU (SVM 38.5 %, RF 43.3 %, kNN 37.3 %); deep baselines complete one end-to-end fit + eval cycle on CPU (cnn3d 18 K params, 10-epoch sanity gives OA = 24 %, which is the "predict-the-majority-class" regime expected for label-scarce CE-only deep models at short epoch counts). Test count after Phase 3: **108 passing** (Phase 2 86 + Phase 3 22). `ruff check .` and `pre-commit run --all-files` both green.
 
 ### Phase 4 — Datasets (week 5, in parallel with Phase 3)
 
@@ -380,6 +382,8 @@ A short append-only record of decisions and the reasons for them. Format: `[ID] 
 - `D-08  2026-06-05 — Reconcile EPH and CFA-GDRO notes on the total loss: CFA-GDRO consumes per-sample cross-entropy (not per-sample EPH); EPH enters additively as a calibration regulariser with weight $\lambda_{\mathrm{evi}}$. Discovered during the Phase 2E smoke debug — the EPH Bayes-risk has a vanishing gradient ($O(1/K)$) at the uniform-prediction saddle, so $\mathcal{L}_{\mathrm{EPH}}$ alone cannot escape it. The CFA-GDRO note Eq. (4) is the source of truth and was already correct; the EPH note Eq. (16) drift to "$\mathcal{L}_{\mathrm{EPH}}$ replaces CE" was a transcription error. Updated EPH note §5, cp_graph note §5, and method.tex §3.5. The "Reliable" claim is preserved via CFA-GDRO operating on per-class CE; the "Calibrated" claim is preserved via the additive $\mathcal{L}_{\mathrm{EPH}}$ term.`
 - `D-09  2026-06-05 — Swap BatchNorm2d → GroupNorm in SpatialCNNStem — with 5 samples per class the BN running stats drift from the test distribution at eval time, collapsing OA from a peaking 20% to <5%. GN normalises per-sample and removes the train/eval mismatch.`
 - `D-10  2026-06-05 — Relax the M2E.8 OA target — the original "OA ≥ 80%" exit criterion was over-optimistic for label-scarce CFA-GDRO. The robust reweighting biases predictions toward rare classes (by design), which depresses common-class-dominated OA but raises AA and rare-class accuracy. Replace the single OA bar with a three-criterion bundle: (i) AA ≥ 70%, (ii) rare-class ≥ 80%, (iii) determinism (same seed → identical metrics). The smoke achieves OA = 62.97%, AA = 78.37%, rare-class = 99.39%, which clears (i)-(iii). Document this as evidence rather than failure: the gap between AA and OA is exactly the per-class-vs-overall trade-off that CFA-GDRO is designed to make.`
+- `D-11  2026-06-17 — Wire every model-YAML knob through DRGSMamba.from_config and key the train DataLoader generator off the experiment seed — the Phase-2 second audit identified silently-ignored fields in configs/model/dr_gsmamba.yaml (use_bn, hippo_init, band_importance_gating, kernel_sizes, dropout, stop_grad_target) and a hardcoded DataLoader generator seed = 0 in trainer.py. The fields now drive real code paths (norm_type, use_hippo_init, use_band_gate, spatial_dropout, cp_graph_stop_grad_target) so Phase-7 ablations can toggle them honestly; the DataLoader generator is now seeded with seed + 1 so multi-seed runs in Phase 6 differ in batch order as well as in model init and split.`
+- `D-12  2026-06-17 — Build SpectralFormer, SSFTT, NonlocalGCN, and MambaHSI as faithful in-house re-implementations instead of wrapping the official repos — three reasons: (i) the Phase-9 submission must compile from this repository alone for anonymisation review; (ii) several official repos carry incompatible licences for the Pattern Recognition single-PDF submission; (iii) MambaHSI's reference kernel depends on a Mamba GPU kernel that does not install cleanly on Windows + CPU which would block CI. Architectures follow the published papers verbatim; norms are switched to GroupNorm to honour decision D-09. Reproduction gap (vs published numbers) recorded in docs/baselines.md and filled in Phase 5 M5.2.`
 
 Add a new entry every time the math, the title, the contributions list, the schedule, or the venue changes.
 

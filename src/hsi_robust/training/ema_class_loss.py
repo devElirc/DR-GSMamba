@@ -62,9 +62,7 @@ class EMAClassLoss:
         self._seen.zero_()
 
     @torch.no_grad()
-    def update(
-        self, per_sample_losses: torch.Tensor, labels: torch.Tensor
-    ) -> torch.Tensor:
+    def update(self, per_sample_losses: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
         """Update the EMA with one batch.
 
         Parameters

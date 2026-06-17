@@ -122,8 +122,13 @@ def test_cfa_gdro_ema_pathway() -> None:
     ema_losses = torch.tensor([10.0, 1.0, 1.0, 1.0])
     ema_seen = torch.tensor([True, True, True, True])
     _, info_ema = cfa_gdro_loss(
-        losses, labels, pi, alpha=0.5, gamma=1.0,
-        ema_class_losses=ema_losses, ema_seen=ema_seen,
+        losses,
+        labels,
+        pi,
+        alpha=0.5,
+        gamma=1.0,
+        ema_class_losses=ema_losses,
+        ema_seen=ema_seen,
     )
     # Under EMA the highest-EMA-loss class (class 0) saturates its cap; under
     # no-EMA it is dropped (its live loss is the smallest). We check the q_star
@@ -183,9 +188,7 @@ def test_dirichlet_kl_matches_torch_distributions() -> None:
     tilde_alpha = 1.0 + torch.rand(n, k) * 9.0  # in [1, 10]
     ours = dirichlet_kl_to_uniform(tilde_alpha)  # (N,)
     # Reference.
-    ref = kl_divergence(
-        Dirichlet(tilde_alpha), Dirichlet(torch.ones(k))
-    )  # (N,)
+    ref = kl_divergence(Dirichlet(tilde_alpha), Dirichlet(torch.ones(k)))  # (N,)
     diff = (ours - ref).abs()
     assert (diff < 1e-5).all(), f"max abs diff = {diff.max().item()}"
 
@@ -255,6 +258,25 @@ def test_cp_graph_loss_degenerate_single_sample() -> None:
     assert info["degree"] == 0
 
 
+def test_cp_graph_loss_stop_grad_target_propagates_to_probs() -> None:
+    """D-11: stop_grad_target=False lets gradient flow through neighbour probs."""
+    torch.manual_seed(0)
+    n, d, k = 6, 8, 3
+    features = torch.randn(n, d, requires_grad=True)
+    logits = torch.randn(n, k)
+    probs = torch.softmax(logits, dim=-1).requires_grad_(True)
+    # With stop-grad target (default), gradient on probs comes only from log p.
+    loss_sg, info_sg = cp_graph_loss(features, probs, k=2, tau_g=1.0, stop_grad_target=True)
+    grad_sg = torch.autograd.grad(loss_sg, probs, retain_graph=True)[0]
+    # Without stop-grad target, both log p and the neighbour-average contribute.
+    loss_ng, info_ng = cp_graph_loss(features, probs, k=2, tau_g=1.0, stop_grad_target=False)
+    grad_ng = torch.autograd.grad(loss_ng, probs)[0]
+    assert info_sg["stop_grad_target"] is True
+    assert info_ng["stop_grad_target"] is False
+    # The two gradient patterns must differ (otherwise stop_grad_target is dead).
+    assert not torch.allclose(grad_sg, grad_ng, atol=1e-6)
+
+
 # --------------------------------------------------------------------------- #
 # Baselines
 # --------------------------------------------------------------------------- #
@@ -288,9 +310,7 @@ def test_baseline_sagawa_group_dro_basic() -> None:
     torch.manual_seed(0)
     per_sample = torch.tensor([0.1, 0.2, 1.5, 0.05], requires_grad=True)
     labels = torch.tensor([0, 0, 1, 2])
-    loss, q_new, _ = sagawa_group_dro_loss(
-        per_sample, labels, num_classes=3, q_state=None, eta=0.1
-    )
+    loss, q_new, _ = sagawa_group_dro_loss(per_sample, labels, num_classes=3, q_state=None, eta=0.1)
     assert q_new.shape == (3,)
     assert float(q_new.sum()) == pytest.approx(1.0)
     # Class 1 (loss 1.5) should get the largest weight.
@@ -322,13 +342,9 @@ def test_baseline_sagawa_validates_inputs() -> None:
     with pytest.raises(ValueError):
         sagawa_group_dro_loss(torch.randn(2, 3), torch.tensor([0, 1]), num_classes=3)
     with pytest.raises(ValueError):
-        sagawa_group_dro_loss(
-            torch.randn(2), torch.tensor([0, 1, 2]), num_classes=3
-        )
+        sagawa_group_dro_loss(torch.randn(2), torch.tensor([0, 1, 2]), num_classes=3)
     with pytest.raises(ValueError):
-        sagawa_group_dro_loss(
-            torch.randn(2), torch.tensor([0, 1]), num_classes=3, eta=-0.01
-        )
+        sagawa_group_dro_loss(torch.randn(2), torch.tensor([0, 1]), num_classes=3, eta=-0.01)
 
 
 def test_cfa_gdro_validates_shapes_and_labels() -> None:
@@ -344,9 +360,7 @@ def test_cfa_gdro_validates_shapes_and_labels() -> None:
         cfa_gdro_loss(torch.randn(2), torch.tensor([0, 1]), pi.view(1, 2), alpha=0.3, gamma=1.0)
     # Out-of-range labels.
     with pytest.raises(ValueError):
-        cfa_gdro_loss(
-            torch.randn(2), torch.tensor([0, 5]), pi, alpha=0.3, gamma=1.0
-        )
+        cfa_gdro_loss(torch.randn(2), torch.tensor([0, 5]), pi, alpha=0.3, gamma=1.0)
     # Wrong EMA shape.
     with pytest.raises(ValueError):
         cfa_gdro_loss(

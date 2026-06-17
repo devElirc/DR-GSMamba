@@ -57,7 +57,11 @@ class DRGSMamba(nn.Module):
         op_s4_state: int = 16,
         op_s4_layers: int = 2,
         op_s4_bidir: bool = True,
+        op_s4_hippo_init: bool = True,
+        op_s4_band_gate: bool = True,
         spatial_base_channels: int = 32,
+        spatial_norm_type: str = "gn",
+        spatial_dropout: float = 0.0,
         cp_graph_k: int = 8,
         cp_graph_tau_g: float = 1.0,
         use_cp_graph: bool = True,
@@ -81,6 +85,8 @@ class DRGSMamba(nn.Module):
             out_dim=op_s4_hidden,
             bidirectional=op_s4_bidir,
             dropout=dropout,
+            use_hippo_init=op_s4_hippo_init,
+            use_band_gate=op_s4_band_gate,
         )
         spectral_dim = op_s4_hidden
 
@@ -90,6 +96,8 @@ class DRGSMamba(nn.Module):
             patch_size=patch_size,
             out_dim=2 * spatial_base_channels,
             base_channels=spatial_base_channels,
+            norm_type=spatial_norm_type,
+            dropout=spatial_dropout,
         )
         spatial_dim = 2 * spatial_base_channels
 
@@ -131,6 +139,11 @@ class DRGSMamba(nn.Module):
         sp = dict(model_cfg.get("spatial_stem") or {})
         cg = dict(model_cfg.get("cp_graph") or {})
         ev = dict(model_cfg.get("evidential_head") or {})
+        # ``hidden_dims: [first_block_width]`` is accepted for backward compat;
+        # the canonical key is ``base_channels``.
+        base_channels = sp.get("base_channels")
+        if base_channels is None:
+            base_channels = (sp.get("hidden_dims") or [32])[0]
         return cls(
             num_bands=num_bands,
             num_pca=num_pca,
@@ -138,9 +151,14 @@ class DRGSMamba(nn.Module):
             num_classes=num_classes,
             feature_dim=int(model_cfg.get("feature_dim", 128)),
             op_s4_hidden=int(op.get("hidden_dim", 64)),
+            op_s4_state=int(op.get("state_dim", 16)),
             op_s4_layers=int(op.get("num_layers", 2)),
             op_s4_bidir=bool(op.get("bidirectional", True)),
-            spatial_base_channels=int((sp.get("hidden_dims") or [32])[0]),
+            op_s4_hippo_init=bool(op.get("hippo_init", True)),
+            op_s4_band_gate=bool(op.get("band_importance_gating", True)),
+            spatial_base_channels=int(base_channels),
+            spatial_norm_type=str(sp.get("norm_type", "gn")),
+            spatial_dropout=float(sp.get("dropout", 0.0)),
             cp_graph_k=int(cg.get("k", 8)),
             cp_graph_tau_g=float(cg.get("tau_g", 1.0)),
             use_cp_graph=bool(model_cfg.get("use_cp_graph", True)),

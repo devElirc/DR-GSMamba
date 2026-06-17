@@ -24,9 +24,7 @@ import numpy as np
 from sklearn.metrics import cohen_kappa_score, confusion_matrix
 
 
-def per_class_accuracy(
-    y_true: np.ndarray, y_pred: np.ndarray, num_classes: int
-) -> np.ndarray:
+def per_class_accuracy(y_true: np.ndarray, y_pred: np.ndarray, num_classes: int) -> np.ndarray:
     """Return per-class accuracy as a length-``K`` array (NaN if class absent)."""
     y_true = np.asarray(y_true).astype(int)
     y_pred = np.asarray(y_pred).astype(int)
@@ -44,9 +42,7 @@ def overall_accuracy(y_true: np.ndarray, y_pred: np.ndarray) -> float:
     return float((y_true == y_pred).mean())
 
 
-def average_accuracy(
-    y_true: np.ndarray, y_pred: np.ndarray, num_classes: int
-) -> float:
+def average_accuracy(y_true: np.ndarray, y_pred: np.ndarray, num_classes: int) -> float:
     """Mean of per-class accuracies, ignoring classes absent from y_true."""
     per = per_class_accuracy(y_true, y_pred, num_classes)
     mask = np.isfinite(per)
@@ -58,9 +54,7 @@ def kappa_score(y_true: np.ndarray, y_pred: np.ndarray, num_classes: int) -> flo
     return float(cohen_kappa_score(y_true, y_pred, labels=list(range(num_classes))))
 
 
-def worst_class_accuracy(
-    y_true: np.ndarray, y_pred: np.ndarray, num_classes: int
-) -> float:
+def worst_class_accuracy(y_true: np.ndarray, y_pred: np.ndarray, num_classes: int) -> float:
     per = per_class_accuracy(y_true, y_pred, num_classes)
     mask = np.isfinite(per)
     return float(per[mask].min()) if mask.any() else float("nan")

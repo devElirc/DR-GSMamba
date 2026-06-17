@@ -99,9 +99,14 @@ def evidential_loss(
     Returns
     -------
     per_sample_loss:
-        ``(N,)``, fed into CFA-GDRO solver.
+        ``(N,)``, per-sample EPH loss. Reported for diagnostics only --
+        per decision D-08 in ``roadmap.md`` the CFA-GDRO solver consumes
+        per-sample cross-entropy (not this tensor); the trainer feeds the
+        mean of this tensor into the total objective as a calibration
+        regulariser with weight ``lambda_evi``.
     mean_loss:
-        ``()``, the "mean EPH" term of the total loss.
+        ``()``, the "mean EPH" term of the total loss (Eq. (4) of
+        ``docs/math/cfa_gdro.md`` §3).
     info:
         dict with keys ``lik`` (mean Bayes-risk), ``kl`` (mean KL),
         ``mean_vacuity`` (= ``K / S``), ``kl_weight`` (echoed back).

@@ -61,12 +61,21 @@ class TrainConfig:
     num_workers: int = 0  # CPU-friendly default
     pin_memory: bool = False
 
-    optimizer: dict[str, Any] = field(default_factory=lambda: {
-        "name": "adamw", "lr": 1e-3, "weight_decay": 1e-4, "betas": (0.9, 0.999),
-    })
-    scheduler: dict[str, Any] = field(default_factory=lambda: {
-        "name": "cosine", "warmup_epochs": 5, "min_lr": 1e-5,
-    })
+    optimizer: dict[str, Any] = field(
+        default_factory=lambda: {
+            "name": "adamw",
+            "lr": 1e-3,
+            "weight_decay": 1e-4,
+            "betas": (0.9, 0.999),
+        }
+    )
+    scheduler: dict[str, Any] = field(
+        default_factory=lambda: {
+            "name": "cosine",
+            "warmup_epochs": 5,
+            "min_lr": 1e-5,
+        }
+    )
     grad_clip: float = 1.0
 
     # Loss-mixing weights (matching cfa_gdro.md §3 Eq. (4)).
@@ -75,10 +84,11 @@ class TrainConfig:
     cfa_lambda_rob: float = 0.5
     cfa_ema_momentum: float = 0.9
     evi_anneal_epochs: int = 10
-    evi_lambda: float = 1.0          # lambda_evi
+    evi_lambda: float = 1.0  # lambda_evi
     cp_graph_k: int = 8
     cp_graph_tau_g: float = 1.0
     cp_graph_weight: float = 0.1
+    cp_graph_stop_grad_target: bool = True
 
     # Bookkeeping.
     log_every: int = 50
@@ -109,6 +119,7 @@ class TrainConfig:
             cp_graph_k=int(cpg.get("k", 8)),
             cp_graph_tau_g=float(cpg.get("tau_g", 1.0)),
             cp_graph_weight=float(cpg.get("weight", 0.1)),
+            cp_graph_stop_grad_target=bool(cpg.get("stop_grad_target", True)),
             log_every=int(training_cfg.get("log_every", 50)),
             val_every=int(training_cfg.get("val_every", 1)),
             save_every=int(training_cfg.get("save_every", 50)),
@@ -148,6 +159,7 @@ class Trainer:
         output_dir: Path,
         device: torch.device | str = "cpu",
         on_log: Callable[[dict[str, Any]], None] | None = None,
+        seed: int = 0,
     ) -> None:
         self.device = torch.device(device)
         self.model = model.to(self.device)
@@ -158,10 +170,14 @@ class Trainer:
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.on_log = on_log
+        self.seed = int(seed)
 
-        # Generator for the train DataLoader -- determinism hook.
+        # Train DataLoader generator: keyed by the experiment seed so every
+        # seed in the Phase 6 grid sees a different batch shuffle order.
+        # ``seed + 1`` keeps the model-init RNG (seeded with ``seed``) and the
+        # shuffle RNG on independent streams.
         self._dl_generator = torch.Generator()
-        self._dl_generator.manual_seed(0)
+        self._dl_generator.manual_seed(self.seed + 1)
 
         self.train_loader = DataLoader(
             train_dataset,
@@ -253,6 +269,7 @@ class Trainer:
             probs,
             k=self.config.cp_graph_k,
             tau_g=self.config.cp_graph_tau_g,
+            stop_grad_target=self.config.cp_graph_stop_grad_target,
         )
 
         total = (
@@ -297,7 +314,10 @@ class Trainer:
             if (epoch + 1) % self.config.val_every == 0:
                 val_metrics = self.evaluate()
                 log_row.update({f"val/{k}": v for k, v in val_metrics.items()})
-                if isinstance(val_metrics.get("OA"), float) and val_metrics["OA"] > self.state.best_oa:
+                if (
+                    isinstance(val_metrics.get("OA"), float)
+                    and val_metrics["OA"] > self.state.best_oa
+                ):
                     self.state.best_oa = val_metrics["OA"]
                     self._save_checkpoint("best.pt", val_metrics=val_metrics)
             self.state.history.append(log_row)
@@ -348,9 +368,17 @@ class Trainer:
             all_vacuity.append(out["vacuity"].detach().cpu().numpy())
             all_aleatoric.append(out["aleatoric"].detach().cpu().numpy())
 
-        probs_arr = np.concatenate(all_probs, axis=0) if all_probs else np.zeros((0, self.model.num_classes))
-        preds_arr = np.concatenate(all_preds, axis=0) if all_preds else np.zeros((0,), dtype=np.int64)
-        labels_arr = np.concatenate(all_labels, axis=0) if all_labels else np.zeros((0,), dtype=np.int64)
+        probs_arr = (
+            np.concatenate(all_probs, axis=0)
+            if all_probs
+            else np.zeros((0, self.model.num_classes))
+        )
+        preds_arr = (
+            np.concatenate(all_preds, axis=0) if all_preds else np.zeros((0,), dtype=np.int64)
+        )
+        labels_arr = (
+            np.concatenate(all_labels, axis=0) if all_labels else np.zeros((0,), dtype=np.int64)
+        )
 
         metrics = compute_metrics(
             labels_arr,
@@ -366,9 +394,7 @@ class Trainer:
     # ------------------------------------------------------------------ #
     # Checkpointing
     # ------------------------------------------------------------------ #
-    def _save_checkpoint(
-        self, name: str, *, val_metrics: dict[str, Any] | None = None
-    ) -> Path:
+    def _save_checkpoint(self, name: str, *, val_metrics: dict[str, Any] | None = None) -> Path:
         path = self.output_dir / name
         payload = {
             "model": self.model.state_dict(),

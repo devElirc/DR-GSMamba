@@ -1,0 +1,7 @@
+# Random Forest baseline (Ham et al. 2005).
+name: rf
+family: shallow
+sklearn:
+  n_estimators: 200
+  min_samples_leaf: 1
+  n_jobs: 1

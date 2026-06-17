@@ -76,6 +76,46 @@ def test_spatial_stem_rejects_wrong_channels() -> None:
         stem(torch.randn(2, 11, 7, 7))
 
 
+def test_spatial_stem_norm_type_toggle() -> None:
+    """Decision D-09 ablation knob: 'gn' (default) vs 'bn' must both run."""
+    gn = SpatialCNNStem(in_channels=6, patch_size=5, out_dim=16, base_channels=8, norm_type="gn")
+    bn = SpatialCNNStem(in_channels=6, patch_size=5, out_dim=16, base_channels=8, norm_type="bn")
+    x = torch.randn(4, 6, 5, 5)
+    assert gn(x).shape == (4, 16)
+    assert bn(x).shape == (4, 16)
+    # Mismatched key must raise.
+    with pytest.raises(ValueError):
+        SpatialCNNStem(in_channels=6, patch_size=5, norm_type="layer")
+
+
+def test_spatial_stem_dropout_active() -> None:
+    stem = SpatialCNNStem(in_channels=4, patch_size=5, out_dim=8, base_channels=8, dropout=0.5)
+    assert isinstance(stem.dropout, torch.nn.Dropout)
+    assert stem.dropout.p == 0.5
+    stem.train()
+    torch.manual_seed(0)
+    out1 = stem(torch.randn(8, 4, 5, 5))
+    torch.manual_seed(1)
+    out2 = stem(torch.randn(8, 4, 5, 5))
+    assert not torch.allclose(out1, out2)
+
+
+def test_ops4_encoder_disables_band_gate_and_hippo_init() -> None:
+    enc = OPS4Encoder(
+        num_bands=12,
+        d_model=8,
+        num_layers=1,
+        out_dim=8,
+        bidirectional=False,
+        use_hippo_init=False,
+        use_band_gate=False,
+    )
+    assert enc.band_gate is None
+    assert enc.fwd_blocks[0].use_hippo_init is False
+    y = enc(torch.randn(3, 12))
+    assert y.shape == (3, 8)
+
+
 # --------------------------------------------------------------------------- #
 # CP-Graph
 # --------------------------------------------------------------------------- #
@@ -301,8 +341,42 @@ def test_drgsmamba_from_config() -> None:
         "cp_graph": {"k": 2, "tau_g": 1.0},
         "evidential_head": {"tau_init": 4.0, "tau_min": 1.0, "tau_max": 30.0},
     }
-    model = DRGSMamba.from_config(
-        cfg, num_bands=20, num_pca=6, patch_size=5, num_classes=4
-    )
+    model = DRGSMamba.from_config(cfg, num_bands=20, num_pca=6, patch_size=5, num_classes=4)
     out = model(torch.randn(2, 20), torch.randn(2, 6, 5, 5))
     assert out["probs"].shape == (2, 4)
+
+
+def test_drgsmamba_from_config_threads_all_knobs() -> None:
+    """Decision D-11 contract: every model-YAML key must drive code."""
+    cfg = {
+        "feature_dim": 24,
+        "op_s4": {
+            "hidden_dim": 12,
+            "state_dim": 6,
+            "num_layers": 1,
+            "bidirectional": False,
+            "hippo_init": False,
+            "band_importance_gating": False,
+        },
+        "spatial_stem": {
+            "base_channels": 8,
+            "norm_type": "bn",
+            "dropout": 0.3,
+        },
+        "cp_graph": {"k": 2, "tau_g": 0.7},
+        "evidential_head": {"tau_init": 3.0, "tau_min": 1.0, "tau_max": 20.0},
+    }
+    model = DRGSMamba.from_config(cfg, num_bands=10, num_pca=4, patch_size=5, num_classes=3)
+    # op_s4 knobs honoured.
+    assert model.op_s4.bidirectional is False
+    assert model.op_s4.use_band_gate is False
+    assert model.op_s4.fwd_blocks[0].use_hippo_init is False
+    assert model.op_s4.d_model == 12
+    assert model.op_s4.fwd_blocks[0].d_state == 6
+    # spatial knobs honoured.
+    assert model.spatial.norm_type == "bn"
+    assert isinstance(model.spatial.dropout, torch.nn.Dropout)
+    assert model.spatial.dropout.p == 0.3
+    # Forward pass still works.
+    out = model(torch.randn(4, 10), torch.randn(4, 4, 5, 5))
+    assert out["probs"].shape == (4, 3)

@@ -153,6 +153,7 @@ def test_qualitative_maps_shape_and_background() -> None:
     cmap = classification_map(pred, pixel_coords, spatial)
     emap = error_map(pred, target, pixel_coords, spatial)
     from hsi_robust.eval import aleatoric_map, vacuity_map
+
     vmap = vacuity_map(vac, pixel_coords, spatial)
     amap = aleatoric_map(ale, pixel_coords, spatial)
     assert cmap.shape == (3, 3) and cmap[0, 0] == 1 and cmap[0, 1] == -1
@@ -170,12 +171,17 @@ def test_qualitative_maps_shape_and_background() -> None:
 class _SyntheticDataset(TensorDataset):
     """Yields (raw_spectrum, pca_patch, label) like HSIDataset."""
 
-    def __init__(self, n: int, num_bands: int, num_pca: int, patch_size: int, num_classes: int, seed: int = 0) -> None:
+    def __init__(
+        self, n: int, num_bands: int, num_pca: int, patch_size: int, num_classes: int, seed: int = 0
+    ) -> None:
         g = torch.Generator().manual_seed(seed)
         # Class-conditional means in feature space so the model can learn.
         labels = torch.randint(0, num_classes, (n,), generator=g)
         spec = torch.randn(n, num_bands, generator=g) + labels.float().unsqueeze(1) * 0.1
-        patch = torch.randn(n, num_pca, patch_size, patch_size, generator=g) + labels.float().view(-1, 1, 1, 1) * 0.1
+        patch = (
+            torch.randn(n, num_pca, patch_size, patch_size, generator=g)
+            + labels.float().view(-1, 1, 1, 1) * 0.1
+        )
         super().__init__(spec, patch, labels)
 
 
@@ -195,8 +201,12 @@ def test_trainer_smoke_runs_one_epoch_on_synthetic() -> None:
         cp_graph_k=2,
         dropout=0.0,
     )
-    train_ds = _SyntheticDataset(n=32, num_bands=20, num_pca=4, patch_size=5, num_classes=num_classes, seed=1)
-    val_ds = _SyntheticDataset(n=16, num_bands=20, num_pca=4, patch_size=5, num_classes=num_classes, seed=2)
+    train_ds = _SyntheticDataset(
+        n=32, num_bands=20, num_pca=4, patch_size=5, num_classes=num_classes, seed=1
+    )
+    val_ds = _SyntheticDataset(
+        n=16, num_bands=20, num_pca=4, patch_size=5, num_classes=num_classes, seed=2
+    )
     scene_freq = torch.full((num_classes,), 1.0 / num_classes)
     cfg = TrainConfig(
         epochs=2,
@@ -208,6 +218,7 @@ def test_trainer_smoke_runs_one_epoch_on_synthetic() -> None:
         save_every=99,
     )
     import tempfile
+
     with tempfile.TemporaryDirectory() as tmp:
         tr = Trainer(
             model=model,
@@ -223,3 +234,67 @@ def test_trainer_smoke_runs_one_epoch_on_synthetic() -> None:
         last = state.history[-1]
         assert "val/OA" in last
         assert isinstance(last["val/OA"], float)
+
+
+def test_trainer_dataloader_seed_keyed_to_experiment_seed() -> None:
+    """D-11: Trainer DataLoader generator must depend on the experiment seed.
+
+    With identical model + dataset, two trainers initialised with different
+    seeds must produce different shuffle orders in the first batch.
+    """
+    num_classes = 3
+    train_ds = _SyntheticDataset(
+        n=32, num_bands=10, num_pca=4, patch_size=3, num_classes=num_classes, seed=0
+    )
+    val_ds = _SyntheticDataset(
+        n=4, num_bands=10, num_pca=4, patch_size=3, num_classes=num_classes, seed=99
+    )
+    scene_freq = torch.full((num_classes,), 1.0 / num_classes)
+    cfg = TrainConfig(
+        epochs=1,
+        batch_size=4,
+        num_workers=0,
+        pin_memory=False,
+        scheduler={"name": "cosine", "warmup_epochs": 0, "min_lr": 1e-4},
+        evi_anneal_epochs=1,
+        save_every=99,
+        val_every=99,
+    )
+
+    def _first_batch_labels(seed: int) -> torch.Tensor:
+        torch.manual_seed(seed)
+        model = DRGSMamba(
+            num_bands=10,
+            num_pca=4,
+            patch_size=3,
+            num_classes=num_classes,
+            feature_dim=8,
+            op_s4_hidden=4,
+            op_s4_state=2,
+            op_s4_layers=1,
+            spatial_base_channels=4,
+            cp_graph_k=2,
+            dropout=0.0,
+        )
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tr = Trainer(
+                model=model,
+                scene_freq=scene_freq,
+                train_dataset=train_ds,
+                val_dataset=val_ds,
+                config=cfg,
+                output_dir=tmp,
+                seed=seed,
+            )
+            return next(iter(tr.train_loader))[2]
+
+    labels_seed0 = _first_batch_labels(0)
+    labels_seed1 = _first_batch_labels(1)
+    labels_seed0_again = _first_batch_labels(0)
+    # Same seed -> identical shuffle.
+    assert torch.equal(labels_seed0, labels_seed0_again)
+    # Different seed -> different shuffle (probability of accidental match
+    # over 4 picks from 32 with non-trivial ordering is negligible).
+    assert not torch.equal(labels_seed0, labels_seed1)

@@ -216,10 +216,14 @@ def evidential_loss(
 ) -> tuple[torch.Tensor, torch.Tensor, dict]:
     """
     Returns (per_sample_loss, mean_loss, info).
-    per_sample_loss : shape (N,)  -> fed into CFA-GDRO solver
-    mean_loss       : scalar      -> the "mean EPH" term in the total loss
+    per_sample_loss : shape (N,)  -- diagnostic only; CFA-GDRO consumes
+                                     per-sample CE, not this tensor (D-08).
+    mean_loss       : scalar      -> the "mean EPH" calibration regulariser
+                                     entering the total objective with
+                                     weight lambda_evi (Eq. (4) of
+                                     docs/math/cfa_gdro.md).
     info            : dict with components ('lik', 'kl', 'mean_vacuity', ...)
     """
 ```
 
-This is the exact signature we will implement in Phase 2D.
+This is the exact signature implemented in Phase 2D (`hsi_robust.losses.evidential.evidential_loss`).

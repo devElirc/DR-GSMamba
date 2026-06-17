@@ -25,6 +25,7 @@ def cp_graph_loss(
     k: int = 8,
     tau_g: float = 1.0,
     eps: float = 1e-12,
+    stop_grad_target: bool = True,
 ) -> tuple[torch.Tensor, dict]:
     """One-directional KL consistency loss on EPH probabilities over a k-NN graph.
 
@@ -41,15 +42,23 @@ def cp_graph_loss(
         Graph temperature on cosine similarities.
     eps:
         Numerical floor used inside the KL.
+    stop_grad_target:
+        If ``True`` (default, matches the math note §4 boxed equation) the
+        neighbour-averaged target ``tilde p`` is detached from the autograd
+        graph. Setting ``False`` lets gradients flow through neighbour
+        predictions as well -- this is the symmetric-style variant we ablate
+        in Phase 7 to verify the BYOL-style stop-gradient is in fact the
+        better default.
 
     Returns
     -------
     loss:
         Scalar tensor (mean KL over the batch). Differentiable in ``probs``
         and ``features`` (via the unnormalised cosine inside the softmax);
-        edge weights and the target ``tilde p`` are detached.
+        edge weights are detached and, by default, the target is detached.
     info:
-        dict with ``mean_neighbour_kl``, ``mean_weight_entropy``, ``degree``.
+        dict with ``mean_neighbour_kl``, ``mean_weight_entropy``, ``degree``,
+        ``stop_grad_target`` (echoed back).
 
     Notes
     -----
@@ -62,16 +71,26 @@ def cp_graph_loss(
     n = features.shape[0]
     if n <= 1 or k <= 0:
         zero = features.new_zeros(())
-        return zero, {"mean_neighbour_kl": 0.0, "mean_weight_entropy": 0.0, "degree": 0}
+        return zero, {
+            "mean_neighbour_kl": 0.0,
+            "mean_weight_entropy": 0.0,
+            "degree": 0,
+            "stop_grad_target": bool(stop_grad_target),
+        }
 
     idx, w = build_cp_graph(features, k=k, tau_g=tau_g)
     w_detached = w.detach()  # edge weights detached per math note §3
 
-    # Neighbour predictive probabilities: (N, k', K). Detach to make tilde p a
-    # stop-gradient target.
-    neigh_probs = probs.detach()[idx]  # (N, k', K)
-    tilde_p = (w_detached.unsqueeze(-1) * neigh_probs).sum(dim=1)  # (N, K)
-    tilde_p = tilde_p.detach()
+    # Neighbour predictive probabilities: (N, k', K). The math contract
+    # detaches ``tilde p`` to make it a BYOL-style stop-gradient target. Pass
+    # ``stop_grad_target=False`` for the symmetric-KL ablation.
+    if stop_grad_target:
+        neigh_probs = probs.detach()[idx]  # (N, k', K)
+        tilde_p = (w_detached.unsqueeze(-1) * neigh_probs).sum(dim=1)
+        tilde_p = tilde_p.detach()
+    else:
+        neigh_probs = probs[idx]  # gradient flows through neighbour rows
+        tilde_p = (w_detached.unsqueeze(-1) * neigh_probs).sum(dim=1)
 
     # KL(sg(tilde p) || p) per sample, then mean.
     log_p = torch.log(probs.clamp(min=eps))
@@ -90,5 +109,6 @@ def cp_graph_loss(
         "mean_neighbour_kl": float(per_sample_kl.mean().detach()),
         "mean_weight_entropy": float(weight_entropy_norm),
         "degree": int(w_detached.shape[1]),
+        "stop_grad_target": bool(stop_grad_target),
     }
     return loss, info

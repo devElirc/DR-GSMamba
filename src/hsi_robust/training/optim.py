@@ -17,9 +17,7 @@ import torch
 from torch.optim.lr_scheduler import LambdaLR
 
 
-def build_optimizer(
-    parameters: Any, opt_cfg: dict[str, Any]
-) -> torch.optim.Optimizer:
+def build_optimizer(parameters: Any, opt_cfg: dict[str, Any]) -> torch.optim.Optimizer:
     """Construct an optimiser from a ``configs/training/*.yaml`` ``optimizer`` block."""
     name = str(opt_cfg.get("name", "adamw")).lower()
     if name != "adamw":
@@ -57,9 +55,7 @@ class WarmupCosineSchedule(LambdaLR):
     def _lr_lambda(self, step: int) -> float:
         if step < self.warmup_steps:
             return float(step + 1) / float(max(1, self.warmup_steps))
-        progress = (step - self.warmup_steps) / max(
-            1, self.total_steps - self.warmup_steps
-        )
+        progress = (step - self.warmup_steps) / max(1, self.total_steps - self.warmup_steps)
         progress = min(max(progress, 0.0), 1.0)
         cos = 0.5 * (1.0 + math.cos(math.pi * progress))
         return self.min_lr_ratio + (1.0 - self.min_lr_ratio) * cos

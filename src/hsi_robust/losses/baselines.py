@@ -133,7 +133,9 @@ def sagawa_group_dro_loss(
 
     # Multiplicative update (only on seen classes).
     with torch.no_grad():
-        update = torch.exp(eta * torch.where(seen, class_losses_mean, torch.zeros_like(class_losses_mean)))
+        update = torch.exp(
+            eta * torch.where(seen, class_losses_mean, torch.zeros_like(class_losses_mean))
+        )
         q_new = q * update
         q_new = q_new / q_new.sum().clamp(min=1e-12)
 

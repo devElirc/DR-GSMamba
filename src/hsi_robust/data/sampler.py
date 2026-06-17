@@ -108,8 +108,6 @@ def stratified_fixed_per_class_split(
         else np.empty(0, dtype=np.int64)
     )
     test_idx = (
-        np.concatenate(test_chunks).astype(np.int64)
-        if test_chunks
-        else np.empty(0, dtype=np.int64)
+        np.concatenate(test_chunks).astype(np.int64) if test_chunks else np.empty(0, dtype=np.int64)
     )
     return train_idx, test_idx

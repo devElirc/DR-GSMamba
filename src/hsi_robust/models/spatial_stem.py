@@ -8,16 +8,18 @@ axis to ``pca_components`` channels.
 Architecture (kept intentionally compact to fit the 5 M-parameter budget):
 
     PCA-patch (N, C_in, P, P)
-        -> Conv3x3 + GN + GELU -> Conv3x3 + GN + GELU       (block 1: C_in -> 32)
+        -> Conv3x3 + Norm + GELU -> Conv3x3 + Norm + GELU   (block 1: C_in -> base)
         -> AvgPool2x2 (ceil_mode for odd patches)
-        -> Conv3x3 + GN + GELU -> Conv3x3 + GN + GELU       (block 2: 32 -> 64)
+        -> Conv3x3 + Norm + GELU -> Conv3x3 + Norm + GELU   (block 2: base -> 2*base)
         -> AdaptiveAvgPool to 1x1
-        -> Linear (64 -> out_dim)
+        -> Dropout
+        -> Linear (2*base -> out_dim)
 
-We use :class:`torch.nn.GroupNorm` (not BatchNorm) because the label-scarce
-regime has at most ``5 * num_classes`` training samples, so BN running
-statistics drift from the test distribution at eval time and collapse OA.
-GroupNorm normalises per-sample and side-steps that pathology.
+By default the normaliser is :class:`torch.nn.GroupNorm` (decision D-09 in
+``roadmap.md``) because the label-scarce regime has at most ``5 * num_classes``
+training samples, so BatchNorm running statistics drift from the test
+distribution at eval time and collapse OA. The ``norm_type`` knob exists so the
+GN vs BN decision can be ablated against a reviewer challenge.
 """
 
 from __future__ import annotations
@@ -38,11 +40,26 @@ def _group_count(out_ch: int) -> int:
     return 1
 
 
+def _make_norm(norm_type: str, num_channels: int) -> nn.Module:
+    if norm_type == "gn":
+        return nn.GroupNorm(num_groups=_group_count(num_channels), num_channels=num_channels)
+    if norm_type == "bn":
+        return nn.BatchNorm2d(num_channels)
+    raise ValueError(f"norm_type must be 'gn' or 'bn'; got {norm_type!r}")
+
+
 class _ConvNormAct(nn.Module):
-    def __init__(self, in_ch: int, out_ch: int, kernel: int = 3) -> None:
+    def __init__(
+        self,
+        in_ch: int,
+        out_ch: int,
+        *,
+        kernel: int = 3,
+        norm_type: str = "gn",
+    ) -> None:
         super().__init__()
         self.conv = nn.Conv2d(in_ch, out_ch, kernel_size=kernel, padding=kernel // 2, bias=False)
-        self.norm = nn.GroupNorm(num_groups=_group_count(out_ch), num_channels=out_ch)
+        self.norm = _make_norm(norm_type, out_ch)
         self.act = nn.GELU()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -63,6 +80,12 @@ class SpatialCNNStem(nn.Module):
         Output feature dimensionality.
     base_channels:
         Width of the first conv block (the second uses ``2 * base_channels``).
+    norm_type:
+        ``"gn"`` (default, GroupNorm; see decision D-09) or ``"bn"``
+        (BatchNorm2d, for the GN-vs-BN ablation).
+    dropout:
+        Dropout applied after global average pooling and before the output
+        linear projection. Set to ``0.0`` to disable.
     """
 
     def __init__(
@@ -72,21 +95,33 @@ class SpatialCNNStem(nn.Module):
         patch_size: int,
         out_dim: int = 128,
         base_channels: int = 32,
+        norm_type: str = "gn",
+        dropout: float = 0.0,
     ) -> None:
         super().__init__()
         if in_channels <= 0 or patch_size <= 0:
             raise ValueError("in_channels and patch_size must be positive")
+        if not 0.0 <= dropout < 1.0:
+            raise ValueError(f"dropout must lie in [0, 1); got {dropout}")
         self.in_channels = int(in_channels)
         self.patch_size = int(patch_size)
         self.out_dim = int(out_dim)
+        self.norm_type = norm_type
 
-        c1 = base_channels
-        c2 = 2 * base_channels
+        c1 = int(base_channels)
+        c2 = 2 * c1
 
-        self.block1 = nn.Sequential(_ConvNormAct(in_channels, c1), _ConvNormAct(c1, c1))
+        self.block1 = nn.Sequential(
+            _ConvNormAct(in_channels, c1, norm_type=norm_type),
+            _ConvNormAct(c1, c1, norm_type=norm_type),
+        )
         self.pool = nn.AvgPool2d(kernel_size=2, stride=2, ceil_mode=True)
-        self.block2 = nn.Sequential(_ConvNormAct(c1, c2), _ConvNormAct(c2, c2))
+        self.block2 = nn.Sequential(
+            _ConvNormAct(c1, c2, norm_type=norm_type),
+            _ConvNormAct(c2, c2, norm_type=norm_type),
+        )
         self.gap = nn.AdaptiveAvgPool2d(1)
+        self.dropout = nn.Dropout(dropout) if dropout > 0 else nn.Identity()
         self.out_proj = nn.Linear(c2, out_dim)
 
     def forward(self, patch: torch.Tensor) -> torch.Tensor:
@@ -102,11 +137,10 @@ class SpatialCNNStem(nn.Module):
         ``(N, out_dim)`` per-pixel spatial feature.
         """
         if patch.ndim != 4 or patch.shape[1] != self.in_channels:
-            raise ValueError(
-                f"expected (N, {self.in_channels}, P, P); got {tuple(patch.shape)}"
-            )
+            raise ValueError(f"expected (N, {self.in_channels}, P, P); got {tuple(patch.shape)}")
         x = self.block1(patch)
         x = self.pool(x)
         x = self.block2(x)
-        x = self.gap(x).flatten(1)  # (N, c2)
-        return self.out_proj(x)  # (N, out_dim)
+        x = self.gap(x).flatten(1)
+        x = self.dropout(x)
+        return self.out_proj(x)

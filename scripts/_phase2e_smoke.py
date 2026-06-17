@@ -47,16 +47,26 @@ def _read_final(run_id: str) -> dict[str, Any]:
 def _one_run(seed: int, epochs: int, run_id: str) -> int:
     return train_main(
         [
-            "--dataset", "indian_pines",
-            "--training", "label_5",
-            "--seed", str(seed),
-            "--epochs", str(epochs),
-            "--alpha", "0.3",
-            "--gamma", "1.0",
-            "--val-every", "20",
-            "--save-every", str(epochs),
-            "--num-workers", "0",
-            "--output-dir", run_id,
+            "--dataset",
+            "indian_pines",
+            "--training",
+            "label_5",
+            "--seed",
+            str(seed),
+            "--epochs",
+            str(epochs),
+            "--alpha",
+            "0.3",
+            "--gamma",
+            "1.0",
+            "--val-every",
+            "20",
+            "--save-every",
+            str(epochs),
+            "--num-workers",
+            "0",
+            "--output-dir",
+            run_id,
         ]
     )
 

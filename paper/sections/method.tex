@@ -282,8 +282,12 @@ The backbone produces the fused feature $f$ that the EPH consumes. It is compose
 % * Architecture diagram (\autoref{fig:method:arch}) showing the data flow:
 %   raw spectrum -> OP-S4 -> fusion <- spatial stem <- PCA patch
 %                                                       \-> CP-Graph
-%   fusion -> EPH -> probabilities + alpha + (vacuity, aleatoric)
-%   probabilities -> per-sample EPH loss -> CFA-GDRO solver -> total loss.
+%   fusion -> EPH -> (logits = tau * cos) + alpha + (vacuity, aleatoric)
+%   logits -> per-sample CE -> CFA-GDRO solver (decision D-08)
+%   alpha  -> mean EPH      -> additive calibration regulariser
+%   probabilities + fused feature -> CP-Graph consistency loss
+%   total loss = mean CE + lambda_rob * CFA-GDRO + lambda_evi * mean EPH +
+%                lambda_graph * CP-Graph.
 
 % =========================================================================
 %  End of method.tex Phase-1 lock.

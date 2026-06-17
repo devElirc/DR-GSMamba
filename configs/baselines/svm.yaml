@@ -1,0 +1,10 @@
+# SVM-RBF baseline (Melgani & Bruzzone 2004).
+# Hyperparameters are passed verbatim to sklearn.svm.SVC.
+name: svm
+family: shallow
+sklearn:
+  C: 1.0
+  kernel: rbf
+  gamma: scale
+  probability: true
+  cache_size: 512
