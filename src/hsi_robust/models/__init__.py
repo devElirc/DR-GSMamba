@@ -8,21 +8,21 @@ Public surface:
                                               -- in-batch k-NN graph reasoning.
 * :class:`FusionMLP`                        -- concat + MLP fusion.
 * :class:`EvidentialPrototypeHead`          -- Dirichlet-evidential head.
-* :class:`DRGSMamba`                        -- assembled full model.
+* :class:`CFAGDRO`                          -- assembled full CFA-GDRO model.
 """
 
 from __future__ import annotations
 
+from hsi_robust.models.cfa_gdro import CFAGDRO
 from hsi_robust.models.cp_graph import CPGraphRefinement, build_cp_graph
-from hsi_robust.models.dr_gsmamba import DRGSMamba
 from hsi_robust.models.evidential_head import EvidentialPrototypeHead
 from hsi_robust.models.fusion import FusionMLP
 from hsi_robust.models.op_s4 import OPS4Block, OPS4Encoder
 from hsi_robust.models.spatial_stem import SpatialCNNStem
 
 __all__ = [
+    "CFAGDRO",
     "CPGraphRefinement",
-    "DRGSMamba",
     "EvidentialPrototypeHead",
     "FusionMLP",
     "OPS4Block",

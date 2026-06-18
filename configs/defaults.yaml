@@ -15,7 +15,7 @@
 
 defaults:
   dataset: indian_pines
-  model: dr_gsmamba
+  model: cfa_gdro
   training: default
 
 seed: 0

@@ -11,8 +11,8 @@ import pytest
 import torch
 
 from hsi_robust.models import (
+    CFAGDRO,
     CPGraphRefinement,
-    DRGSMamba,
     EvidentialPrototypeHead,
     FusionMLP,
     OPS4Block,
@@ -257,13 +257,13 @@ def test_ops4_block_fft_matches_recurrent_reference() -> None:
 
 
 # --------------------------------------------------------------------------- #
-# DR-GSMamba assembly
+# CFA-GDRO model assembly
 # --------------------------------------------------------------------------- #
 
 
-def test_drgsmamba_forward_shapes() -> None:
+def test_cfa_gdro_forward_shapes() -> None:
     torch.manual_seed(0)
-    model = DRGSMamba(
+    model = CFAGDRO(
         num_bands=30,
         num_pca=8,
         patch_size=9,
@@ -289,9 +289,9 @@ def test_drgsmamba_forward_shapes() -> None:
     out["probs"].sum().backward()
 
 
-def test_drgsmamba_param_count_under_budget() -> None:
+def test_cfa_gdro_param_count_under_budget() -> None:
     # Default-ish config sized for Indian Pines (200 bands, 30 PCA, 9x9, 16 classes).
-    model = DRGSMamba(
+    model = CFAGDRO(
         num_bands=200,
         num_pca=30,
         patch_size=9,
@@ -306,10 +306,10 @@ def test_drgsmamba_param_count_under_budget() -> None:
     assert n_params < 5_000_000, f"model has {n_params} parameters, exceeding 5M budget"
 
 
-def test_drgsmamba_deterministic_under_seed() -> None:
+def test_cfa_gdro_deterministic_under_seed() -> None:
     def _run() -> torch.Tensor:
         torch.manual_seed(123)
-        model = DRGSMamba(
+        model = CFAGDRO(
             num_bands=20,
             num_pca=6,
             patch_size=5,
@@ -333,7 +333,7 @@ def test_drgsmamba_deterministic_under_seed() -> None:
     assert torch.allclose(out1, out2, atol=1e-6)
 
 
-def test_drgsmamba_from_config() -> None:
+def test_cfa_gdro_from_config() -> None:
     cfg = {
         "feature_dim": 32,
         "op_s4": {"hidden_dim": 16, "num_layers": 1, "bidirectional": True},
@@ -341,12 +341,12 @@ def test_drgsmamba_from_config() -> None:
         "cp_graph": {"k": 2, "tau_g": 1.0},
         "evidential_head": {"tau_init": 4.0, "tau_min": 1.0, "tau_max": 30.0},
     }
-    model = DRGSMamba.from_config(cfg, num_bands=20, num_pca=6, patch_size=5, num_classes=4)
+    model = CFAGDRO.from_config(cfg, num_bands=20, num_pca=6, patch_size=5, num_classes=4)
     out = model(torch.randn(2, 20), torch.randn(2, 6, 5, 5))
     assert out["probs"].shape == (2, 4)
 
 
-def test_drgsmamba_from_config_threads_all_knobs() -> None:
+def test_cfa_gdro_from_config_threads_all_knobs() -> None:
     """Decision D-11 contract: every model-YAML key must drive code."""
     cfg = {
         "feature_dim": 24,
@@ -366,7 +366,7 @@ def test_drgsmamba_from_config_threads_all_knobs() -> None:
         "cp_graph": {"k": 2, "tau_g": 0.7},
         "evidential_head": {"tau_init": 3.0, "tau_min": 1.0, "tau_max": 20.0},
     }
-    model = DRGSMamba.from_config(cfg, num_bands=10, num_pca=4, patch_size=5, num_classes=3)
+    model = CFAGDRO.from_config(cfg, num_bands=10, num_pca=4, patch_size=5, num_classes=3)
     # op_s4 knobs honoured.
     assert model.op_s4.bidirectional is False
     assert model.op_s4.use_band_gate is False

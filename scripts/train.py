@@ -1,4 +1,4 @@
-"""Train a single ``DRGSMamba`` model on one dataset / one seed / one label setting.
+"""Train the CFA-GDRO model on one dataset / one seed / one label setting.
 
 Usage::
 
@@ -22,7 +22,7 @@ from pathlib import Path
 import torch
 
 from hsi_robust.data import build_split
-from hsi_robust.models import DRGSMamba
+from hsi_robust.models import CFAGDRO
 from hsi_robust.training import TrainConfig, Trainer
 from hsi_robust.utils import load_yaml, seed_everything
 
@@ -147,7 +147,7 @@ def main(argv: list[str] | None = None) -> int:
 
     # Build model.
     device = torch.device(args.device)
-    model = DRGSMamba.from_config(
+    model = CFAGDRO.from_config(
         model_cfg,
         num_bands=artifacts.num_bands,
         num_pca=artifacts.pca_components,

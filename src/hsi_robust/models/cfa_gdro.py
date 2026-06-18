@@ -1,7 +1,7 @@
-"""Full DR-GSMamba backbone + Evidential Prototype Head.
+"""Full CFA-GDRO model: backbone + Evidential Prototype Head.
 
-Assembles the four model modules of Phase 2C into one ``nn.Module`` whose
-forward returns the bundle expected by the training loop and the loss layer:
+Assembles the model modules of Phase 2C into one ``nn.Module`` whose forward
+returns the bundle expected by the training loop and the loss layer:
 
     raw spectrum (N, B) ---- OP-S4 encoder ---->  f_spec (N, d_spec)
                                                                        \\
@@ -11,7 +11,7 @@ forward returns the bundle expected by the training loop and the loss layer:
 
 The model exposes one ``forward(spectrum, patch)`` returning a dict (per the
 roadmap), and a ``from_config(config, num_bands, num_pca, patch_size, num_classes)``
-factory that reads the model YAML (``configs/model/dr_gsmamba.yaml``).
+factory that reads the model YAML (``configs/model/cfa_gdro.yaml``).
 """
 
 from __future__ import annotations
@@ -28,8 +28,8 @@ from hsi_robust.models.op_s4 import OPS4Encoder
 from hsi_robust.models.spatial_stem import SpatialCNNStem
 
 
-class DRGSMamba(nn.Module):
-    """Two-stream backbone with optional CP-Graph refinement and EPH classifier.
+class CFAGDRO(nn.Module):
+    """Two-stream CFA-GDRO model with optional CP-Graph refinement and EPH head.
 
     Returns a dict::
 
@@ -129,8 +129,8 @@ class DRGSMamba(nn.Module):
         num_pca: int,
         patch_size: int,
         num_classes: int,
-    ) -> DRGSMamba:
-        """Build a ``DRGSMamba`` from a parsed ``configs/model/*.yaml`` dict.
+    ) -> CFAGDRO:
+        """Build a ``CFAGDRO`` from a parsed ``configs/model/*.yaml`` dict.
 
         Only the fields present in the YAML are consumed; everything else falls
         back to constructor defaults.

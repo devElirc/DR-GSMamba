@@ -1,9 +1,9 @@
-# Default model configuration for the full DR-GSMamba backbone + EPH.
+# Default model configuration for the full CFA-GDRO model (backbone + EPH).
 # Every key under op_s4 / spatial_stem / cp_graph / evidential_head is wired
-# into DRGSMamba.from_config (no decorative knobs); ablations toggle these
+# into CFAGDRO.from_config (no decorative knobs); ablations toggle these
 # directly. Architectural choices ablated in Phase 7: roadmap M7.3.
 
-name: dr_gsmamba
+name: cfa_gdro
 feature_dim: 128   # output dim of the fusion module that the EPH consumes
 use_cp_graph: true # toggle the CP-Graph refinement layer
 

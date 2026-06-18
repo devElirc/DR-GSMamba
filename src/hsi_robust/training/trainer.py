@@ -1,4 +1,4 @@
-"""End-to-end trainer for ``DRGSMamba`` + EPH + CFA-GDRO + CP-Graph.
+"""End-to-end trainer for the CFA-GDRO model (backbone + EPH + CP-Graph).
 
 The total loss assembled here is exactly Eq. (4) of
 ``docs/math/cfa_gdro.md`` §3:
@@ -47,7 +47,7 @@ from torch.utils.data import DataLoader
 from hsi_robust.eval.calibration import expected_calibration_error
 from hsi_robust.eval.metrics import compute_metrics
 from hsi_robust.losses import cfa_gdro_loss, cp_graph_loss, evidential_loss
-from hsi_robust.models import DRGSMamba
+from hsi_robust.models import CFAGDRO
 from hsi_robust.training.ema_class_loss import EMAClassLoss
 from hsi_robust.training.optim import build_optimizer, build_scheduler, clip_grad_norm
 
@@ -146,12 +146,12 @@ def _move_batch(batch: tuple, device: torch.device) -> tuple:
 
 
 class Trainer:
-    """Train one ``DRGSMamba`` instance with the full CFA-GDRO + EPH + CP-Graph stack."""
+    """Train one ``CFAGDRO`` instance with the full CFA-GDRO + EPH + CP-Graph stack."""
 
     def __init__(
         self,
         *,
-        model: DRGSMamba,
+        model: CFAGDRO,
         scene_freq: torch.Tensor,
         train_dataset: torch.utils.data.Dataset,
         val_dataset: torch.utils.data.Dataset,

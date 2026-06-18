@@ -14,7 +14,7 @@ rather than pull a third-party Mamba kernel for two reasons:
 
 * Reproducibility: the trainer already certifies OP-S4 to 1e-5 vs its
   recurrent reference, so the baseline is exactly the same SSM the main
-  model uses (the MambaHSI vs DR-GSMamba comparison then isolates the
+  model uses (the MambaHSI vs CFA-GDRO comparison then isolates the
   loss-level contribution).
 * Anonymisation: the Phase 9 submission must compile from this repo alone;
   re-using OP-S4 keeps the dependency surface clean.

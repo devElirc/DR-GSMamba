@@ -19,7 +19,7 @@ from hsi_robust.eval import (
     error_map,
     expected_calibration_error,
 )
-from hsi_robust.models import DRGSMamba
+from hsi_robust.models import CFAGDRO
 from hsi_robust.training import (
     EMAClassLoss,
     TrainConfig,
@@ -188,7 +188,7 @@ class _SyntheticDataset(TensorDataset):
 def test_trainer_smoke_runs_one_epoch_on_synthetic() -> None:
     torch.manual_seed(0)
     num_classes = 4
-    model = DRGSMamba(
+    model = CFAGDRO(
         num_bands=20,
         num_pca=4,
         patch_size=5,
@@ -263,7 +263,7 @@ def test_trainer_dataloader_seed_keyed_to_experiment_seed() -> None:
 
     def _first_batch_labels(seed: int) -> torch.Tensor:
         torch.manual_seed(seed)
-        model = DRGSMamba(
+        model = CFAGDRO(
             num_bands=10,
             num_pca=4,
             patch_size=3,

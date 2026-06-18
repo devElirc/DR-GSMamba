@@ -37,7 +37,7 @@ Phase 2C (model module) is the next milestone — see `roadmap.md` §3.
 - **Phase 2A — Scaffolding.**
   - `pyproject.toml` (PEP 621, src-layout, ruff + black + mypy + pytest configuration).
   - `src/hsi_robust/{__init__,_version,data,models,losses,training,eval,utils}/__init__.py` package skeleton.
-  - `configs/{defaults.yaml, datasets/, model/, training/}` layout with placeholders for Indian Pines, Pavia University, Salinas, Houston 2013, the full DR-GSMamba model, and the four label-scarcity regimes (3 / 5 / 10 / 20 samples per class).
+  - `configs/{defaults.yaml, datasets/, model/, training/}` layout with placeholders for Indian Pines, Pavia University, Salinas, Houston 2013, the full CFA-GDRO model, and the four label-scarcity regimes (3 / 5 / 10 / 20 samples per class).
   - `requirements.txt` and `requirements-dev.txt`.
   - `tests/conftest.py` with auto-used deterministic seeding and tiny-tensor / scene-frequency fixtures; `tests/test_smoke.py` proves the package and every subpackage import.
   - `scripts/{train.py, run_multi_seed.py, run_baselines.py, run_ablations.py, run_robustness.py, make_main_tables.py, make_figures.py}` as importable stubs that exit 0 with a phase pointer.

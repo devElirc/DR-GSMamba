@@ -3,7 +3,7 @@
 Every deep baseline in :mod:`hsi_robust.baselines` is an :class:`nn.Module`
 subclass that implements :meth:`BaselineModel.forward` returning **classification
 logits** ``(N, K)`` from a ``(raw_spectrum, pca_patch)`` pair -- the exact same
-input interface as :class:`hsi_robust.models.DRGSMamba`. This makes the deep
+input interface as :class:`hsi_robust.models.CFAGDRO`. This makes the deep
 baselines drop-in replacements at the trainer's data boundary so head-to-head
 comparison numbers in Phase 6 are not contaminated by data-pipeline drift.
 

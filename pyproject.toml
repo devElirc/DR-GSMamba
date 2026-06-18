@@ -12,7 +12,7 @@ description = "Class-Frequency-Aware Group-DRO for Reliable Label-Scarce Hypersp
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
-authors = [{ name = "DR-GSMamba project" }]
+authors = [{ name = "CFA-GDRO project" }]
 keywords = [
   "hyperspectral",
   "image-classification",

@@ -54,7 +54,7 @@ seed-0 run on the real cube; Phase 5 fills the rest.
 These numbers are **not** the regime we evaluate. The main paper runs on the
 label-scarce regime (3 / 5 / 10 / 20 samples per class, 10 seeds) so the
 expected baseline OA will be substantially lower than the headline figures.
-The relevant comparison is "baseline at 5-spc vs DR-GSMamba at 5-spc", not
+The relevant comparison is "baseline at 5-spc vs CFA-GDRO at 5-spc", not
 baseline-paper-headline.
 
 ### Implementation notes per baseline
