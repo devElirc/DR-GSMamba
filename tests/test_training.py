@@ -7,6 +7,7 @@ end-to-end on a tiny synthetic problem.
 from __future__ import annotations
 
 from itertools import pairwise
+from typing import Any
 
 import numpy as np
 import pytest
@@ -234,6 +235,116 @@ def test_trainer_smoke_runs_one_epoch_on_synthetic() -> None:
         last = state.history[-1]
         assert "val/OA" in last
         assert isinstance(last["val/OA"], float)
+
+
+def _make_synthetic_problem(num_classes: int = 3) -> tuple[Any, Any, torch.Tensor]:
+    train_ds = _SyntheticDataset(
+        n=24, num_bands=10, num_pca=4, patch_size=3, num_classes=num_classes, seed=11
+    )
+    val_ds = _SyntheticDataset(
+        n=12, num_bands=10, num_pca=4, patch_size=3, num_classes=num_classes, seed=22
+    )
+    scene_freq = torch.full((num_classes,), 1.0 / num_classes)
+    return train_ds, val_ds, scene_freq
+
+
+def _tiny_cfa_gdro(num_classes: int = 3) -> CFAGDRO:
+    torch.manual_seed(0)
+    return CFAGDRO(
+        num_bands=10,
+        num_pca=4,
+        patch_size=3,
+        num_classes=num_classes,
+        feature_dim=8,
+        op_s4_hidden=4,
+        op_s4_state=2,
+        op_s4_layers=1,
+        spatial_base_channels=4,
+        cp_graph_k=2,
+        dropout=0.0,
+    )
+
+
+@pytest.mark.parametrize(
+    "loss_name", ["ce", "focal", "sample_cvar", "sagawa_group_dro", "cfa_gdro"]
+)
+def test_trainer_supports_every_internal_ablation_loss(loss_name: str) -> None:
+    """D-14: same backbone + each of the 5 losses must train without error."""
+    num_classes = 3
+    train_ds, val_ds, scene_freq = _make_synthetic_problem(num_classes)
+    cfg = TrainConfig(
+        epochs=1,
+        batch_size=8,
+        num_workers=0,
+        pin_memory=False,
+        scheduler={"name": "cosine", "warmup_epochs": 0, "min_lr": 1e-4},
+        evi_anneal_epochs=1,
+        save_every=99,
+        loss_name=loss_name,
+    )
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmp:
+        tr = Trainer(
+            model=_tiny_cfa_gdro(num_classes),
+            scene_freq=scene_freq,
+            train_dataset=train_ds,
+            val_dataset=val_ds,
+            config=cfg,
+            output_dir=tmp,
+        )
+        state = tr.fit()
+        assert len(state.history) == 1
+        assert "val/OA" in state.history[-1]
+
+
+def test_train_config_rejects_unsupported_loss_name() -> None:
+    """``TrainConfig.__post_init__`` must validate ``loss_name``."""
+    with pytest.raises(ValueError, match="unsupported loss_name"):
+        TrainConfig(loss_name="totally_not_a_loss")  # type: ignore[arg-type]
+
+
+def test_trainer_evaluate_with_calibration_reports_temperature_scaled_ece() -> None:
+    """``evaluate_with_calibration`` must produce ``ECE_15_T`` and a temperature."""
+    num_classes = 3
+    train_ds, val_ds, scene_freq = _make_synthetic_problem(num_classes)
+    cfg = TrainConfig(
+        epochs=1,
+        batch_size=8,
+        num_workers=0,
+        pin_memory=False,
+        scheduler={"name": "cosine", "warmup_epochs": 0, "min_lr": 1e-4},
+        evi_anneal_epochs=1,
+        save_every=99,
+        temperature_scaling=True,
+        temperature_calib_frac=0.25,
+    )
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmp:
+        tr = Trainer(
+            model=_tiny_cfa_gdro(num_classes),
+            scene_freq=scene_freq,
+            train_dataset=train_ds,
+            val_dataset=val_ds,
+            config=cfg,
+            output_dir=tmp,
+        )
+        tr.fit()
+        metrics = tr.evaluate_with_calibration()
+        for key in (
+            "ECE_15",
+            "ECE_15_report",
+            "ECE_15_T",
+            "temperature",
+            "NLL_report",
+            "NLL_T",
+            "temperature_n_calib",
+            "temperature_n_report",
+        ):
+            assert key in metrics, f"missing {key}"
+        assert metrics["temperature"] > 0
+        assert metrics["temperature_n_calib"] + metrics["temperature_n_report"] == len(val_ds)
 
 
 def test_trainer_dataloader_seed_keyed_to_experiment_seed() -> None:

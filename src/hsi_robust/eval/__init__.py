@@ -29,16 +29,24 @@ from hsi_robust.eval.qualitative import (
     error_map,
     vacuity_map,
 )
+from hsi_robust.eval.temperature_scaling import (
+    apply_temperature,
+    evaluate_with_temperature,
+    fit_temperature,
+)
 
 __all__ = [
     "ReliabilityBins",
     "aleatoric_map",
+    "apply_temperature",
     "average_accuracy",
     "classification_map",
     "coefficient_of_variation",
     "compute_metrics",
     "error_map",
+    "evaluate_with_temperature",
     "expected_calibration_error",
+    "fit_temperature",
     "kappa_score",
     "overall_accuracy",
     "per_class_accuracy",

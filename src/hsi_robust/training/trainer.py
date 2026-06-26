@@ -1,19 +1,25 @@
 """End-to-end trainer for the CFA-GDRO model (backbone + EPH + CP-Graph).
 
-The total loss assembled here is exactly Eq. (4) of
-``docs/math/cfa_gdro.md`` §3:
+The total loss assembled here depends on ``TrainConfig.loss_name``:
 
-    L_total = mean_CE
-              + lambda_rob  * L_CFA-GDRO   (operates on per-sample CE losses)
-              + lambda_evi  * L_EPH         (Bayes-risk + annealed KL)
-              + lambda_graph * L_CP-graph
+* ``"cfa_gdro"`` (default, the paper's contribution) follows Eq. (4) of
+  ``docs/math/cfa_gdro.md`` §3 exactly::
 
-The ``mean_CE`` anchor is required for stable optimisation: the EPH Bayes-risk
-loss has a vanishing gradient at the uniform-prediction saddle (verified
-empirically during the Phase 2E smoke debug) and cannot escape it on its own.
-The EPH note's Eq. (16) was a transcription drift; this trainer follows the
-CFA-GDRO note Eq. (4) which is the source of truth (see decision D-08 in
-``roadmap.md``).
+      L_total = mean_CE
+                + lambda_rob   * L_CFA-GDRO   (operates on per-sample CE)
+                + lambda_evi   * L_EPH         (Bayes-risk + annealed KL)
+                + lambda_graph * L_CP-graph
+
+  The ``mean_CE`` anchor is required for stable optimisation: the EPH
+  Bayes-risk loss has a vanishing gradient at the uniform-prediction saddle
+  (Phase 2E smoke debug, decision D-08).
+
+* ``"ce"``, ``"focal"``, ``"sample_cvar"``, ``"sagawa_group_dro"`` swap the
+  *robust* objective for the named baseline while keeping the **same backbone
+  + same EPH-prototype classifier head + same data + same seed grid** (the
+  internal Phase-5 M5.2 ablation Kass asked for in his 2026-06-18 feedback,
+  D-14). EPH / CP-Graph auxiliaries are disabled in those rows so the
+  comparison is apples-to-apples on the loss alone.
 
 CE logits come from the EPH head itself -- ``logits = tau * cos(f, m)`` -- so
 the EPH and CE pathways share *exactly* the same network and prototypes, and
@@ -46,10 +52,20 @@ from torch.utils.data import DataLoader
 
 from hsi_robust.eval.calibration import expected_calibration_error
 from hsi_robust.eval.metrics import compute_metrics
-from hsi_robust.losses import cfa_gdro_loss, cp_graph_loss, evidential_loss
+from hsi_robust.eval.temperature_scaling import evaluate_with_temperature
+from hsi_robust.losses import (
+    cfa_gdro_loss,
+    cp_graph_loss,
+    evidential_loss,
+    focal_loss,
+    sagawa_group_dro_loss,
+    sample_cvar_loss,
+)
 from hsi_robust.models import CFAGDRO
 from hsi_robust.training.ema_class_loss import EMAClassLoss
 from hsi_robust.training.optim import build_optimizer, build_scheduler, clip_grad_norm
+
+SUPPORTED_LOSSES = ("ce", "focal", "sample_cvar", "sagawa_group_dro", "cfa_gdro")
 
 
 @dataclass
@@ -78,7 +94,16 @@ class TrainConfig:
     )
     grad_clip: float = 1.0
 
-    # Loss-mixing weights (matching cfa_gdro.md §3 Eq. (4)).
+    # Which training objective to use. Drives `_step` branching.
+    # One of: "ce" | "focal" | "sample_cvar" | "sagawa_group_dro" | "cfa_gdro".
+    loss_name: str = "cfa_gdro"
+
+    # Baseline-loss-specific knobs (only consulted when loss_name selects them).
+    focal_gamma: float = 2.0
+    cvar_alpha: float = 0.3
+    gdro_eta: float = 0.01
+
+    # Loss-mixing weights for the full CFA-GDRO stack (cfa_gdro.md §3 Eq. (4)).
     cfa_alpha: float = 0.3
     cfa_gamma: float = 1.0
     cfa_lambda_rob: float = 0.5
@@ -90,10 +115,22 @@ class TrainConfig:
     cp_graph_weight: float = 0.1
     cp_graph_stop_grad_target: bool = True
 
+    # Calibration. When True, the trainer additionally reports the
+    # temperature-scaled ECE on the held-out report slice of the test set
+    # (Guo et al., 2017). Costs O(K * N_test) at the end of training.
+    temperature_scaling: bool = True
+    temperature_calib_frac: float = 0.2
+
     # Bookkeeping.
     log_every: int = 50
     val_every: int = 1
     save_every: int = 50
+
+    def __post_init__(self) -> None:
+        if self.loss_name not in SUPPORTED_LOSSES:
+            raise ValueError(
+                f"unsupported loss_name {self.loss_name!r}; expected one of {SUPPORTED_LOSSES}"
+            )
 
     @classmethod
     def from_yaml_dict(cls, training_cfg: dict[str, Any]) -> TrainConfig:
@@ -102,6 +139,10 @@ class TrainConfig:
         cfa = loss.get("cfa_gdro") or {}
         evi = loss.get("evidential") or {}
         cpg = loss.get("cp_graph") or {}
+        foc = loss.get("focal") or {}
+        cvar = loss.get("sample_cvar") or {}
+        gdro = loss.get("sagawa_group_dro") or {}
+        ts = training_cfg.get("temperature_scaling") or {}
         return cls(
             epochs=int(training_cfg.get("epochs", 200)),
             batch_size=int(training_cfg.get("batch_size", 64)),
@@ -110,6 +151,10 @@ class TrainConfig:
             optimizer=dict(training_cfg.get("optimizer") or {}),
             scheduler=dict(training_cfg.get("scheduler") or {}),
             grad_clip=float(training_cfg.get("grad_clip", 1.0)),
+            loss_name=str(loss.get("name", "cfa_gdro")),
+            focal_gamma=float(foc.get("gamma", 2.0)),
+            cvar_alpha=float(cvar.get("alpha", 0.3)),
+            gdro_eta=float(gdro.get("eta", 0.01)),
             cfa_alpha=float(cfa.get("alpha", 0.3)),
             cfa_gamma=float(cfa.get("gamma", 1.0)),
             cfa_lambda_rob=float(cfa.get("weight", 0.5)),
@@ -120,6 +165,8 @@ class TrainConfig:
             cp_graph_tau_g=float(cpg.get("tau_g", 1.0)),
             cp_graph_weight=float(cpg.get("weight", 0.1)),
             cp_graph_stop_grad_target=bool(cpg.get("stop_grad_target", True)),
+            temperature_scaling=bool(ts.get("enabled", True)),
+            temperature_calib_frac=float(ts.get("calib_frac", 0.2)),
             log_every=int(training_cfg.get("log_every", 50)),
             val_every=int(training_cfg.get("val_every", 1)),
             save_every=int(training_cfg.get("save_every", 50)),
@@ -216,6 +263,10 @@ class Trainer:
             dtype=torch.float32,
         )
 
+        # Sagawa group-DRO carries a state vector q (one entry per class) that
+        # persists across batches. Initialised lazily on the first step.
+        self._gdro_q: torch.Tensor | None = None
+
         self.state = TrainState()
 
     # ------------------------------------------------------------------ #
@@ -233,7 +284,14 @@ class Trainer:
         labels: torch.Tensor,
         kl_weight: float,
     ) -> dict[str, Any]:
-        """One forward + loss assembly per ``cfa_gdro.md`` §3 Eq. (4)."""
+        """One forward + loss assembly. Branches on ``config.loss_name``.
+
+        Independent of which loss is selected, every branch shares the
+        backbone (OP-S4 + spatial CNN + fusion) **and** the EPH-prototype
+        classifier head (``logits = tau * cos``). This guarantees the
+        internal Phase-5 M5.2 ablation (D-14) really is "same backbone +
+        different loss".
+        """
         out = self.model(spec, patch)
         alpha = out["alpha"]
         probs = out["probs"]
@@ -241,59 +299,84 @@ class Trainer:
         cos = out["cos"]
         tau = out["temperature"]
 
-        # CE pathway (anchor + CFA-GDRO input). Logits = tau * cos -- same as
-        # what EPH consumes upstream so the two views agree on predictions.
+        # Shared inputs for all loss branches.
         logits = tau * cos
         per_sample_ce = F.cross_entropy(logits, labels, reduction="none")
         mean_ce = per_sample_ce.mean()
 
-        # EPH calibration term (auxiliary to CE).
-        _, mean_eph, evi_info = evidential_loss(alpha, labels, kl_weight=kl_weight)
-
-        # CFA-GDRO on per-sample CE losses (EMA-stabilised).
-        self.ema.update(per_sample_ce.detach(), labels)
-        cfa, cfa_info = cfa_gdro_loss(
-            per_sample_ce,
-            labels,
-            self.scene_freq,
-            alpha=self.config.cfa_alpha,
-            gamma=self.config.cfa_gamma,
-            ema_class_losses=self.ema.losses,
-            ema_seen=self.ema.seen,
-            ema_momentum=self.config.cfa_ema_momentum,
-        )
-
-        # CP-Graph consistency on fused features + EPH predictive probabilities.
-        cp_loss, cp_info = cp_graph_loss(
-            fused,
-            probs,
-            k=self.config.cp_graph_k,
-            tau_g=self.config.cp_graph_tau_g,
-            stop_grad_target=self.config.cp_graph_stop_grad_target,
-        )
-
-        total = (
-            mean_ce
-            + self.config.cfa_lambda_rob * cfa
-            + self.config.evi_lambda * mean_eph
-            + self.config.cp_graph_weight * cp_loss
-        )
-
-        scalars = {
-            "loss/total": float(total.detach()),
+        scalars: dict[str, Any] = {
             "loss/mean_ce": float(mean_ce.detach()),
-            "loss/mean_eph": float(mean_eph.detach()),
-            "loss/cfa_gdro": float(cfa.detach()),
-            "loss/cp_graph": float(cp_loss.detach()),
-            "loss/kl": float(evi_info["kl"]),
-            "loss/lik": float(evi_info["lik"]),
-            "loss/kl_weight": float(kl_weight),
-            "cfa/threshold_nu": float(cfa_info["threshold_nu"]),
-            "cfa/active_set_size": int(cfa_info["active_set_size"]),
-            "cp_graph/weight_entropy": float(cp_info["mean_weight_entropy"]),
-            "eph/mean_vacuity": float(evi_info["mean_vacuity"]),
             "eph/temperature": float(tau.detach()),
         }
+
+        name = self.config.loss_name
+        if name == "ce":
+            total = mean_ce
+        elif name == "focal":
+            _, mean_focal = focal_loss(logits, labels, gamma_focal=self.config.focal_gamma)
+            total = mean_focal
+            scalars["loss/focal"] = float(mean_focal.detach())
+        elif name == "sample_cvar":
+            cvar_loss_val, cvar_info = sample_cvar_loss(per_sample_ce, alpha=self.config.cvar_alpha)
+            total = cvar_loss_val
+            scalars["loss/sample_cvar"] = float(cvar_loss_val.detach())
+            scalars["cvar/threshold"] = float(cvar_info["threshold"])
+            scalars["cvar/num_kept"] = int(cvar_info["num_kept"])
+        elif name == "sagawa_group_dro":
+            gdro_loss_val, q_new, gdro_info = sagawa_group_dro_loss(
+                per_sample_ce,
+                labels,
+                num_classes=self.model.num_classes,
+                q_state=self._gdro_q,
+                eta=self.config.gdro_eta,
+            )
+            self._gdro_q = q_new
+            total = gdro_loss_val
+            scalars["loss/sagawa_group_dro"] = float(gdro_loss_val.detach())
+            scalars["gdro/active_set_size"] = int(gdro_info["active_set_size"])
+            scalars["gdro/q_max"] = float(q_new.max().item())
+        else:  # cfa_gdro (full stack -- Eq. (4) of cfa_gdro.md §3)
+            _, mean_eph, evi_info = evidential_loss(alpha, labels, kl_weight=kl_weight)
+            self.ema.update(per_sample_ce.detach(), labels)
+            cfa, cfa_info = cfa_gdro_loss(
+                per_sample_ce,
+                labels,
+                self.scene_freq,
+                alpha=self.config.cfa_alpha,
+                gamma=self.config.cfa_gamma,
+                ema_class_losses=self.ema.losses,
+                ema_seen=self.ema.seen,
+                ema_momentum=self.config.cfa_ema_momentum,
+            )
+            cp_loss, cp_info = cp_graph_loss(
+                fused,
+                probs,
+                k=self.config.cp_graph_k,
+                tau_g=self.config.cp_graph_tau_g,
+                stop_grad_target=self.config.cp_graph_stop_grad_target,
+            )
+            total = (
+                mean_ce
+                + self.config.cfa_lambda_rob * cfa
+                + self.config.evi_lambda * mean_eph
+                + self.config.cp_graph_weight * cp_loss
+            )
+            scalars.update(
+                {
+                    "loss/mean_eph": float(mean_eph.detach()),
+                    "loss/cfa_gdro": float(cfa.detach()),
+                    "loss/cp_graph": float(cp_loss.detach()),
+                    "loss/kl": float(evi_info["kl"]),
+                    "loss/lik": float(evi_info["lik"]),
+                    "loss/kl_weight": float(kl_weight),
+                    "cfa/threshold_nu": float(cfa_info["threshold_nu"]),
+                    "cfa/active_set_size": int(cfa_info["active_set_size"]),
+                    "cp_graph/weight_entropy": float(cp_info["mean_weight_entropy"]),
+                    "eph/mean_vacuity": float(evi_info["mean_vacuity"]),
+                }
+            )
+
+        scalars["loss/total"] = float(total.detach())
         return {"total": total, "scalars": scalars}
 
     # ------------------------------------------------------------------ #
@@ -350,9 +433,18 @@ class Trainer:
         return running / max(1, n_batches)
 
     @torch.no_grad()
-    def evaluate(self) -> dict[str, Any]:
+    def evaluate(self, *, return_logits: bool = False) -> dict[str, Any]:
+        """Run inference on the val/test set and return metrics.
+
+        When ``return_logits`` is True, the returned dict also includes
+        ``_logits`` and ``_labels`` numpy arrays so a caller can fit
+        post-hoc temperature scaling (Guo et al., 2017). The logits are
+        ``tau * cos`` matching what the model would feed into a softmax for
+        prediction.
+        """
         self.model.eval()
         all_probs: list[np.ndarray] = []
+        all_logits: list[np.ndarray] = []
         all_preds: list[np.ndarray] = []
         all_labels: list[np.ndarray] = []
         all_vacuity: list[np.ndarray] = []
@@ -361,8 +453,10 @@ class Trainer:
             spec, patch, labels = _move_batch(batch, self.device)
             out = self.model(spec, patch)
             probs = out["probs"].detach().cpu().numpy()
+            logits = (out["temperature"] * out["cos"]).detach().cpu().numpy()
             preds = probs.argmax(axis=1)
             all_probs.append(probs)
+            all_logits.append(logits)
             all_preds.append(preds)
             all_labels.append(labels.detach().cpu().numpy())
             all_vacuity.append(out["vacuity"].detach().cpu().numpy())
@@ -371,6 +465,11 @@ class Trainer:
         probs_arr = (
             np.concatenate(all_probs, axis=0)
             if all_probs
+            else np.zeros((0, self.model.num_classes))
+        )
+        logits_arr = (
+            np.concatenate(all_logits, axis=0)
+            if all_logits
             else np.zeros((0, self.model.num_classes))
         )
         preds_arr = (
@@ -389,6 +488,37 @@ class Trainer:
         if probs_arr.shape[0] > 0:
             ece, _ = expected_calibration_error(probs_arr, labels_arr, num_bins=15)
             metrics["ECE_15"] = float(ece)
+        if return_logits:
+            metrics["_logits"] = logits_arr
+            metrics["_labels"] = labels_arr
+        return metrics
+
+    def evaluate_with_calibration(self) -> dict[str, Any]:
+        """Final evaluation that also reports the temperature-scaled ECE.
+
+        This is the metric set the internal Phase-5 M5.2 ablation table prints
+        (D-14). The temperature is fit on a deterministic
+        ``temperature_calib_frac`` slice of the test set; the raw and scaled
+        ECE values are both reported on the remaining slice, so the comparison
+        does not double-count.
+        """
+        metrics = self.evaluate(return_logits=True)
+        logits = metrics.pop("_logits")
+        labels = metrics.pop("_labels")
+        if self.config.temperature_scaling and labels.shape[0] >= 2:
+            ts = evaluate_with_temperature(
+                logits,
+                labels,
+                num_bins=15,
+                calib_frac=self.config.temperature_calib_frac,
+            )
+            metrics["temperature"] = ts["T"]
+            metrics["ECE_15_report"] = ts["ECE_15_raw"]
+            metrics["ECE_15_T"] = ts["ECE_15_T"]
+            metrics["NLL_report"] = ts["NLL_raw"]
+            metrics["NLL_T"] = ts["NLL_T"]
+            metrics["temperature_n_calib"] = ts["n_calib"]
+            metrics["temperature_n_report"] = ts["n_report"]
         return metrics
 
     # ------------------------------------------------------------------ #

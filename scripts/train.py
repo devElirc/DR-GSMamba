@@ -30,6 +30,20 @@ ROOT = Path(__file__).resolve().parents[1]
 CONFIG_ROOT = ROOT / "configs"
 
 
+def _deep_merge(base: dict, overlay: dict) -> dict:
+    """Recursively merge ``overlay`` into ``base`` (overlay wins).
+
+    Lists are *replaced*, not concatenated. ``base`` is not mutated.
+    """
+    result = dict(base)
+    for k, v in overlay.items():
+        if isinstance(v, dict) and isinstance(result.get(k), dict):
+            result[k] = _deep_merge(result[k], v)
+        else:
+            result[k] = v
+    return result
+
+
 def _resolve_configs(args: argparse.Namespace) -> tuple[dict, dict, dict]:
     defaults = load_yaml(CONFIG_ROOT / "defaults.yaml")
     ds_name = args.dataset or defaults["defaults"]["dataset"]
@@ -38,13 +52,15 @@ def _resolve_configs(args: argparse.Namespace) -> tuple[dict, dict, dict]:
 
     ds_cfg = load_yaml(CONFIG_ROOT / "datasets" / f"{ds_name}.yaml")
     model_cfg = load_yaml(CONFIG_ROOT / "model" / f"{model_name}.yaml")
-    # Compose the training config: start from default.yaml and overlay any
-    # label-scarcity override (which only specifies samples_per_class).
+    # Compose the training config: start from default.yaml and *deep*-merge
+    # any overlay (label-scarcity, ablation-loss, ...). Deep merge is required
+    # so an overlay that only sets ``loss.name`` does not erase the
+    # ``loss.cfa_gdro`` / ``loss.evidential`` / ``loss.cp_graph`` defaults.
     train_cfg_default = load_yaml(CONFIG_ROOT / "training" / "default.yaml")
     train_cfg = dict(train_cfg_default)
     if train_name != "default":
         overlay = load_yaml(CONFIG_ROOT / "training" / f"{train_name}.yaml")
-        train_cfg.update(overlay)
+        train_cfg = _deep_merge(train_cfg, overlay)
 
     # Bring `samples_per_class` from training override into dataset config.
     if "samples_per_class" in train_cfg:
@@ -55,6 +71,8 @@ def _resolve_configs(args: argparse.Namespace) -> tuple[dict, dict, dict]:
         train_cfg["epochs"] = int(args.epochs)
     if args.batch_size is not None:
         train_cfg["batch_size"] = int(args.batch_size)
+    if args.loss_name is not None:
+        train_cfg.setdefault("loss", {})["name"] = str(args.loss_name)
     if args.alpha is not None:
         train_cfg.setdefault("loss", {}).setdefault("cfa_gdro", {})["alpha"] = float(args.alpha)
     if args.gamma is not None:
@@ -62,6 +80,24 @@ def _resolve_configs(args: argparse.Namespace) -> tuple[dict, dict, dict]:
     if args.lambda_rob is not None:
         train_cfg.setdefault("loss", {}).setdefault("cfa_gdro", {})["weight"] = float(
             args.lambda_rob
+        )
+    if args.lambda_evi is not None:
+        train_cfg.setdefault("loss", {}).setdefault("evidential", {})["weight"] = float(
+            args.lambda_evi
+        )
+    if args.evi_anneal is not None:
+        train_cfg.setdefault("loss", {}).setdefault("evidential", {})["anneal_epochs"] = int(
+            args.evi_anneal
+        )
+    if args.focal_gamma is not None:
+        train_cfg.setdefault("loss", {}).setdefault("focal", {})["gamma"] = float(args.focal_gamma)
+    if args.cvar_alpha is not None:
+        train_cfg.setdefault("loss", {}).setdefault("sample_cvar", {})["alpha"] = float(
+            args.cvar_alpha
+        )
+    if args.gdro_eta is not None:
+        train_cfg.setdefault("loss", {}).setdefault("sagawa_group_dro", {})["eta"] = float(
+            args.gdro_eta
         )
     if args.samples_per_class is not None:
         ds_cfg["samples_per_class"] = int(args.samples_per_class)
@@ -84,9 +120,21 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--epochs", type=int, default=None)
     parser.add_argument("--batch-size", type=int, default=None)
     parser.add_argument("--samples-per-class", type=int, default=None)
-    parser.add_argument("--alpha", type=float, default=None)
-    parser.add_argument("--gamma", type=float, default=None)
-    parser.add_argument("--lambda-rob", type=float, default=None)
+    parser.add_argument(
+        "--loss-name",
+        type=str,
+        default=None,
+        choices=["ce", "focal", "sample_cvar", "sagawa_group_dro", "cfa_gdro"],
+        help="training objective (Kass internal-ablation table, D-14)",
+    )
+    parser.add_argument("--alpha", type=float, default=None, help="CFA-GDRO alpha")
+    parser.add_argument("--gamma", type=float, default=None, help="CFA-GDRO gamma")
+    parser.add_argument("--lambda-rob", type=float, default=None, help="CFA-GDRO weight")
+    parser.add_argument("--lambda-evi", type=float, default=None, help="EPH calibration weight")
+    parser.add_argument("--evi-anneal", type=int, default=None, help="EPH KL anneal epochs")
+    parser.add_argument("--focal-gamma", type=float, default=None, help="focal-loss gamma")
+    parser.add_argument("--cvar-alpha", type=float, default=None, help="sample-CVaR alpha")
+    parser.add_argument("--gdro-eta", type=float, default=None, help="Sagawa group-DRO eta")
     parser.add_argument(
         "--val-every",
         type=int,
@@ -188,11 +236,14 @@ def main(argv: list[str] | None = None) -> int:
     )
     state = trainer.fit()
 
-    # Final summary.
-    final_metrics = trainer.evaluate()
+    # Final summary. Use evaluate_with_calibration so the final.json carries
+    # both the raw ECE and the temperature-scaled ECE -- this is what the
+    # Phase-5 M5.2 ablation table reads (D-14, response to feedback).
+    final_metrics = trainer.evaluate_with_calibration()
     final = {
         "best_oa": state.best_oa,
         "final_metrics": final_metrics,
+        "loss_name": cfg.loss_name,
         "num_train": len(artifacts.train_dataset),
         "num_test": len(artifacts.test_dataset),
         "num_classes": artifacts.num_classes,

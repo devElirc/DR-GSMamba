@@ -20,15 +20,32 @@ scheduler:
 grad_clip: 1.0
 
 # ---------------------------------------------------------------------------
-# Loss configuration. The total objective (Eq. (4) of docs/math/cfa_gdro.md) is:
+# Loss configuration.
+#
+# `loss.name` selects the training objective. With name = "cfa_gdro" (the
+# paper's contribution) the total objective follows Eq. (4) of
+# docs/math/cfa_gdro.md:
 #   L_total = mean_CE
 #             + lambda_rob   * L_CFA-GDRO   (operates on per-sample CE)
 #             + lambda_evi   * L_EPH         (Bayes-risk + annealed KL)
 #             + lambda_graph * L_CP-graph
 # The mean_CE anchor is required to escape the uniform-prediction saddle of
 # the EPH Bayes-risk loss; see decision D-08 in roadmap.md.
+#
+# Other values of `loss.name` ("ce", "focal", "sample_cvar", "sagawa_group_dro")
+# select baseline robust / imbalanced losses for the internal Phase-5 M5.2
+# ablation (decision D-14). In those rows the EPH / CP-Graph auxiliaries are
+# disabled so the comparison is apples-to-apples on the loss alone; the
+# backbone, prototype head, data path, and seed grid are unchanged.
 # ---------------------------------------------------------------------------
 loss:
+  name: cfa_gdro         # one of: ce | focal | sample_cvar | sagawa_group_dro | cfa_gdro
+  focal:
+    gamma: 2.0           # Lin et al. 2017
+  sample_cvar:
+    alpha: 0.3           # top-alpha fraction averaged
+  sagawa_group_dro:
+    eta: 0.01            # multiplicative-weight step (Sagawa et al. 2020)
   cfa_gdro:
     alpha: 0.3           # docs/math/cfa_gdro.md Section 7
     gamma: 1.0           # docs/math/cfa_gdro.md Section 7
@@ -39,3 +56,14 @@ loss:
     weight: 1.0          # lambda_evi
   cp_graph:
     weight: 0.1          # lambda_graph (docs/math/cp_graph.md Section 7)
+
+# ---------------------------------------------------------------------------
+# Post-hoc temperature scaling (Guo et al., 2017). Fit T on a deterministic
+# first-`calib_frac` slice of the test set; report raw + temp-scaled ECE on
+# the remaining slice. Directly addresses Kass's feedback that the smoke run
+# ECE-15 of 0.473 is too high for a method that puts "Calibrated" in the
+# story (decision D-14).
+# ---------------------------------------------------------------------------
+temperature_scaling:
+  enabled: true
+  calib_frac: 0.2
